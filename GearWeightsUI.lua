@@ -1877,46 +1877,50 @@ local function CreateMainFrame()
 	CreateTierCheck("mythic", "Mythic", heroicCheck)
 
 	--------------------------------------------------------------------
-	-- Weapon baseline display - 3 slot icons (Two-Hand / Main Hand / Off
-	-- Hand) mimicking the character pane's weapon slots, showing whichever
-	-- setup is currently tracked as "equipped" for scoring purposes. Click
-	-- any of them to lock/unlock the baseline (see GW.SetWeaponBaselineLocked
-	-- in GearWeightsLoot.lua) - locking freezes it against temporary
-	-- quest-required weapon swaps instead of always following live gear.
+	-- Weapon baseline display - 3 independent slot icons (Two-Hand / Main
+	-- Hand / Off Hand) mimicking the character pane's weapon slots. Each
+	-- remembers the last relevant item seen in its own category (see
+	-- GW.SyncWeaponBoxesFromEquipped in GearWeightsLoot.lua) rather than
+	-- clearing when you swap to the other loadout, and each can be
+	-- independently locked (click) or manually set (drag an item onto it).
 	--------------------------------------------------------------------
+	local WEAPON_BOX_ORDER = { "twoHand", "mainHand", "offHand" }
+	local WEAPON_BOX_LABELS = { twoHand = "Two-Hand Weapon", mainHand = "Main Hand", offHand = "Off Hand" }
+
 	local weaponSlotButtonIndex = 0
 	local function CreateWeaponSlotButton(anchorTo)
 		weaponSlotButtonIndex = weaponSlotButtonIndex + 1
 		local button = CreateFrame("Button", "GearWeightsWeaponSlotButton" .. weaponSlotButtonIndex, dungeonRankPanel, "ItemButtonTemplate")
 		button:SetSize(30, 30)
 		if anchorTo then
-			button:SetPoint("LEFT", anchorTo, "RIGHT", 4, 0)
+			button:SetPoint("LEFT", anchorTo, "RIGHT", 6, 0)
 		else
-			button:SetPoint("TOPRIGHT", -4, -4)
+			button:SetPoint("TOPRIGHT", -16, -10)
 		end
+
+		local lockIcon = button:CreateTexture(nil, "OVERLAY")
+		lockIcon:SetSize(14, 14)
+		lockIcon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -2)
+		lockIcon:SetTexture("Interface\\BUTTONS\\LockButton-Locked-Up")
+		lockIcon:Hide()
+		button.lockIcon = lockIcon
+
 		return button
 	end
 
-	local weaponBaselineTwoHandButton = CreateWeaponSlotButton()
-	local weaponBaselineMainHandButton = CreateWeaponSlotButton(weaponBaselineTwoHandButton)
-	local weaponBaselineOffHandButton = CreateWeaponSlotButton(weaponBaselineMainHandButton)
-	local weaponSlotButtons = { weaponBaselineTwoHandButton, weaponBaselineMainHandButton, weaponBaselineOffHandButton }
-
-	local weaponBaselineLockIcon = dungeonRankPanel:CreateTexture(nil, "OVERLAY")
-	weaponBaselineLockIcon:SetSize(14, 14)
-	weaponBaselineLockIcon:SetPoint("BOTTOMRIGHT", weaponBaselineOffHandButton, "TOPRIGHT", 2, 2)
-	weaponBaselineLockIcon:SetTexture("Interface\\BUTTONS\\LockButton-Locked-Up")
-	weaponBaselineLockIcon:Hide()
+	local weaponBaselineButtons = {}
+	local prevButton
+	for _, box in ipairs(WEAPON_BOX_ORDER) do
+		local button = CreateWeaponSlotButton(prevButton)
+		button.box = box
+		weaponBaselineButtons[box] = button
+		prevButton = button
+	end
 
 	local function RefreshWeaponBaselineDisplay()
-		local mh, oh = GW.GetWeaponBaselineLinks()
-		local is2H = false
-		if mh then
-			local _, _, _, _, _, _, _, _, mhEquipLoc = GetItemInfo(mh)
-			is2H = mhEquipLoc == "INVTYPE_2HWEAPON"
-		end
-
-		local function SetSlotIcon(button, link)
+		for _, box in ipairs(WEAPON_BOX_ORDER) do
+			local button = weaponBaselineButtons[box]
+			local link = GW.GetWeaponBoxLink(box)
 			if link then
 				local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(link)
 				SetItemButtonTexture(button, texture or "Interface\\Icons\\INV_Misc_QuestionMark")
@@ -1924,41 +1928,46 @@ local function CreateMainFrame()
 				SetItemButtonTexture(button, nil)
 			end
 			button.link = link
+			button.lockIcon:SetShown(GW.IsWeaponBoxLocked(box))
 		end
-
-		SetSlotIcon(weaponBaselineTwoHandButton, is2H and mh or nil)
-		SetSlotIcon(weaponBaselineMainHandButton, (not is2H) and mh or nil)
-		SetSlotIcon(weaponBaselineOffHandButton, (not is2H) and oh or nil)
-
-		weaponBaselineLockIcon:SetShown(GW.IsWeaponBaselineLocked())
 	end
 	GW.RefreshWeaponBaselineDisplay = RefreshWeaponBaselineDisplay
 
-	local function ToggleWeaponBaselineLock()
-		GW.SetWeaponBaselineLocked(not GW.IsWeaponBaselineLocked())
+	local function ToggleWeaponBoxLock(box)
+		local newLocked = not GW.IsWeaponBoxLocked(box)
+		GW.SetWeaponBoxLocked(box, newLocked)
 		RefreshWeaponBaselineDisplay()
 		if GW.NotifyWeightsChanged then GW.NotifyWeightsChanged() end
-		DEFAULT_CHAT_FRAME:AddMessage("GearWeights: weapon baseline is now " ..
-			(GW.IsWeaponBaselineLocked()
-				and "|cffff4444locked|r - won't change until you unlock it"
-				or "|cff00ff00dynamic|r - follows whatever you have equipped"))
+		DEFAULT_CHAT_FRAME:AddMessage("GearWeights: " .. WEAPON_BOX_LABELS[box] .. " reference is now " ..
+			(newLocked and "|cffff4444locked|r" or "|cff00ff00dynamic|r"))
 	end
 
-	local weaponSlotLabels = { "Two-Hand Weapon", "Main Hand", "Off Hand" }
-	for i, button in ipairs(weaponSlotButtons) do
-		button:SetScript("OnClick", ToggleWeaponBaselineLock)
+	local function HandleWeaponBoxDrop(box)
+		local infoType, _, itemLink = GetCursorInfo()
+		if infoType == "item" and itemLink then
+			ClearCursor()
+			GW.SetWeaponBoxLink(box, itemLink)
+			RefreshWeaponBaselineDisplay()
+			if GW.NotifyWeightsChanged then GW.NotifyWeightsChanged() end
+		end
+	end
+
+	for _, box in ipairs(WEAPON_BOX_ORDER) do
+		local button = weaponBaselineButtons[box]
+		button:SetScript("OnClick", function() ToggleWeaponBoxLock(box) end)
+		button:SetScript("OnReceiveDrag", function() HandleWeaponBoxDrop(box) end)
 		button:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 			if self.link then
 				GameTooltip:SetHyperlink(self.link)
 			else
-				GameTooltip:AddLine(weaponSlotLabels[i])
-				GameTooltip:AddLine("Empty", 0.6, 0.6, 0.6)
+				GameTooltip:AddLine(WEAPON_BOX_LABELS[box])
+				GameTooltip:AddLine("Empty - drag a weapon here to set it", 0.6, 0.6, 0.6)
 			end
 			GameTooltip:AddLine(" ")
-			GameTooltip:AddLine(GW.IsWeaponBaselineLocked()
-				and "|cffff4444Locked|r - click to unlock (follow equipped gear again)"
-				or "|cff00ff00Dynamic|r - click to lock this as your comparison weapon(s)")
+			GameTooltip:AddLine(GW.IsWeaponBoxLocked(box)
+				and "|cffff4444Locked|r - click to unlock"
+				or "|cff00ff00Dynamic|r - click to lock, or drag a weapon here to set it")
 			GameTooltip:Show()
 		end)
 		button:SetScript("OnLeave", function() GameTooltip:Hide() end)

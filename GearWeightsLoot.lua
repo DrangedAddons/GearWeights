@@ -616,55 +616,102 @@ function GW.SetSlotLocked(slotId, locked)
 end
 
 --------------------------------------------------------------------------------
--- Weapon baseline (2H vs Main Hand/Off Hand) - which weapon setup counts as
--- "currently equipped" for scoring/comparison purposes. Dynamic by default
--- (always reads whatever's actually equipped right now, so it naturally
--- reflects your last real weapon change), but can be locked to freeze a
--- snapshot at the moment of locking - protects comparisons from being thrown
--- off by a temporary quest-required weapon swap.
+-- Weapon baseline - three independent "paperdoll" reference boxes (Two-Hand,
+-- Main Hand, Off Hand) used as the comparison target when scoring weapons.
+-- Each remembers the last relevant item seen in its own category rather than
+-- only reflecting whatever's on your character at this instant:
+--   - Two-Hand remembers the last 2H weapon you had equipped
+--   - Main Hand remembers the last 1H (non-2H) mainhand weapon
+--   - Off Hand remembers the last off-hand item (only updates while a 2H
+--     isn't equipped, since the slot is physically blocked otherwise)
+-- So swapping from a 2H to dual-wield updates Main Hand/Off Hand but leaves
+-- Two-Hand showing your last 2H, and vice versa. Each box can be
+-- independently locked (freezes it against further equip changes - protects
+-- against a temporary quest-required weapon swap) or manually set by
+-- dragging an item onto it in the UI.
 --------------------------------------------------------------------------------
+
+local WEAPON_BOX_KEYS = { twoHand = true, mainHand = true, offHand = true }
 
 local function EnsureWeaponBaseline()
 	GearWeightsDB = GearWeightsDB or {}
-	GearWeightsDB.weaponBaseline = GearWeightsDB.weaponBaseline or { locked = false }
+	GearWeightsDB.weaponBaseline = GearWeightsDB.weaponBaseline or {}
+	for key in pairs(WEAPON_BOX_KEYS) do
+		GearWeightsDB.weaponBaseline[key] = GearWeightsDB.weaponBaseline[key] or { link = nil, locked = false }
+	end
 end
 
-function GW.IsWeaponBaselineLocked()
+function GW.GetWeaponBoxLink(box)
 	EnsureWeaponBaseline()
-	return GearWeightsDB.weaponBaseline.locked or false
+	return GearWeightsDB.weaponBaseline[box].link
 end
 
--- Returns mainHandLink, offHandLink - the links to treat as "currently
--- equipped" for weapon-slot scoring: live equipped gear when unlocked, or the
--- frozen snapshot captured at the moment of locking when locked.
-function GW.GetWeaponBaselineLinks()
+function GW.IsWeaponBoxLocked(box)
+	EnsureWeaponBaseline()
+	return GearWeightsDB.weaponBaseline[box].locked
+end
+
+function GW.SetWeaponBoxLocked(box, locked)
+	EnsureWeaponBaseline()
+	GearWeightsDB.weaponBaseline[box].locked = locked and true or false
+end
+
+-- Manually assigns a box's reference item (e.g. dragged onto it in the UI),
+-- regardless of that box's current lock state - an explicit action always
+-- takes effect immediately.
+function GW.SetWeaponBoxLink(box, link)
+	EnsureWeaponBaseline()
+	GearWeightsDB.weaponBaseline[box].link = link
+end
+
+-- Called on equip changes: updates every unlocked box according to what's
+-- actually relevant to it right now, leaving locked boxes - and boxes whose
+-- category isn't currently active (e.g. Main Hand/Off Hand while a 2H is
+-- equipped) - untouched instead of clearing them.
+function GW.SyncWeaponBoxesFromEquipped()
 	EnsureWeaponBaseline()
 	local baseline = GearWeightsDB.weaponBaseline
-	if baseline.locked then
-		return baseline.mainHand, baseline.offHand
+	local mhLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
+	local ohLink = GetInventoryItemLink("player", INVSLOT_OFFHAND)
+	local mhIs2H = false
+	if mhLink then
+		local _, _, _, _, _, _, _, _, mhEquipLoc = GetItemInfo(mhLink)
+		mhIs2H = mhEquipLoc == "INVTYPE_2HWEAPON"
 	end
-	return GetInventoryItemLink("player", INVSLOT_MAINHAND), GetInventoryItemLink("player", INVSLOT_OFFHAND)
-end
 
-function GW.SetWeaponBaselineLocked(locked)
-	EnsureWeaponBaseline()
-	local baseline = GearWeightsDB.weaponBaseline
-	if locked then
-		baseline.mainHand = GetInventoryItemLink("player", INVSLOT_MAINHAND)
-		baseline.offHand = GetInventoryItemLink("player", INVSLOT_OFFHAND)
+	if mhIs2H then
+		if not baseline.twoHand.locked then baseline.twoHand.link = mhLink end
+	else
+		if not baseline.mainHand.locked then baseline.mainHand.link = mhLink end
+		if not baseline.offHand.locked then baseline.offHand.link = ohLink end
 	end
-	baseline.locked = locked and true or false
 end
 
 -- Returns the link to treat as "equipped" in this slot for scoring/comparison
--- purposes - the tracked weapon baseline above for Main Hand/Off Hand, live
--- equipped gear for every other slot (which has no such baseline concept).
+-- purposes - the tracked Main Hand/Off Hand box for those slots (never the
+-- Two-Hand box; 2H candidates compare against GW.GetTwoHandComparisonScore()
+-- instead, which considers both remembered loadouts), live equipped gear for
+-- every other slot (which has no such baseline concept).
 function GW.GetEquippedLinkForScoring(slotId)
-	if slotId == INVSLOT_MAINHAND or slotId == INVSLOT_OFFHAND then
-		local mh, oh = GW.GetWeaponBaselineLinks()
-		return slotId == INVSLOT_MAINHAND and mh or oh
+	if slotId == INVSLOT_MAINHAND then
+		return GW.GetWeaponBoxLink("mainHand")
+	elseif slotId == INVSLOT_OFFHAND then
+		return GW.GetWeaponBoxLink("offHand")
 	end
 	return GetInventoryItemLink("player", slotId)
+end
+
+-- What a 2H candidate should be compared against: whichever of your two
+-- remembered weapon loadouts (a 2H, or a Main Hand + Off Hand combo) scores
+-- higher - it only counts as a real upgrade if it beats your best current
+-- alternative, not just one of them arbitrarily.
+function GW.GetTwoHandComparisonScore()
+	local twoHandLink = GW.GetWeaponBoxLink("twoHand")
+	local mhLink = GW.GetWeaponBoxLink("mainHand")
+	local ohLink = GW.GetWeaponBoxLink("offHand")
+	local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
+	local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
+	return math.max(twoHandScore, comboScore)
 end
 
 -- Below max level, a heirloom is deliberately kept for its scaling stats and
@@ -826,6 +873,7 @@ dungeonRankTriggerFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 dungeonRankTriggerFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 dungeonRankTriggerFrame:SetScript("OnEvent", function(self, event)
 	if event == "PLAYER_ENTERING_WORLD" then
+		GW.SyncWeaponBoxesFromEquipped()
 		if sessionDungeonScanTriggered then return end
 		sessionDungeonScanTriggered = true
 		local delayFrame = CreateFrame("Frame")
@@ -838,6 +886,8 @@ dungeonRankTriggerFrame:SetScript("OnEvent", function(self, event)
 			end
 		end)
 	elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+		GW.SyncWeaponBoxesFromEquipped()
+		if GW.RefreshWeaponBaselineDisplay then GW.RefreshWeaponBaselineDisplay() end
 		ScheduleDungeonRankRescan()
 	end
 end)

@@ -248,8 +248,11 @@ end
 -- it's blocked, not available. Without this check, any Off Hand-capable item
 -- (shields, one-hand weapons, held items) would score as a free "slot empty"
 -- upgrade even though equipping it would first require replacing the 2H.
+-- This is about real physical blocking right now, so it checks live equipped
+-- gear directly - not the Main Hand reference box, which can be locked to (or
+-- still remembering) a 1H weapon while you're actually wielding a 2H live.
 local function IsMainHandTwoHanded()
-	local mhLink = GW.GetEquippedLinkForScoring(INVSLOT_MAINHAND)
+	local mhLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
 	if not mhLink then return false end
 	local _, _, _, _, _, _, _, _, mhEquipLoc = GetItemInfo(mhLink)
 	return mhEquipLoc == "INVTYPE_2HWEAPON"
@@ -634,9 +637,7 @@ function GW.GetBestUpgradeDiff(itemLink)
 
 	if equipLoc == "INVTYPE_2HWEAPON" then
 		if GW.GetSlotIgnoreReason(INVSLOT_MAINHAND) then return score, nil end
-		local mhLink, ohLink = GW.GetWeaponBaselineLinks()
-		local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
-		return score, score - comboScore
+		return score, score - GW.GetTwoHandComparisonScore()
 	end
 
 	local slots = slotsForEquipLoc[equipLoc]
@@ -693,20 +694,28 @@ local function AppendScoreLines(tooltip, itemLink)
 		return
 	end
 
-	-- A 2H weapon replaces both the main hand and off hand, so compare it against
-	-- the combined score of whatever is currently in both slots, not just one.
+	-- A 2H weapon replaces both the main hand and off hand, so compare it
+	-- against whichever of your two remembered weapon loadouts (a 2H, or a
+	-- Main Hand + Off Hand combo) scores higher - see GW.GetTwoHandComparisonScore.
 	if equipLoc == "INVTYPE_2HWEAPON" then
-		if GW.GetEquippedLinkForScoring(INVSLOT_MAINHAND) == itemLink then
+		if GW.GetWeaponBoxLink("twoHand") == itemLink then
 			tooltip:Show()
 			return
 		end
-		local mhLink, ohLink = GW.GetWeaponBaselineLinks()
 		local mhIgnoreReason = GW.GetSlotIgnoreReason(INVSLOT_MAINHAND)
-		if not mhLink and not ohLink then
+		local twoHandLink = GW.GetWeaponBoxLink("twoHand")
+		local mhLink = GW.GetWeaponBoxLink("mainHand")
+		local ohLink = GW.GetWeaponBoxLink("offHand")
+		if not twoHandLink and not mhLink and not ohLink then
 			tooltip:AddLine(mhIgnoreReason and ("|cff888888Upgrade (weapon slots empty) (" .. mhIgnoreReason .. ")|r") or "|cff00ff00Upgrade (weapon slots empty)|r")
 		else
+			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
 			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
-			AppendComparisonLine(tooltip, "Main Hand + Off Hand combo: ", score, comboScore, mhIgnoreReason)
+			if comboScore >= twoHandScore then
+				AppendComparisonLine(tooltip, "Main Hand + Off Hand combo: ", score, comboScore, mhIgnoreReason)
+			else
+				AppendComparisonLine(tooltip, "Two-Hand reference: ", score, twoHandScore, mhIgnoreReason)
+			end
 		end
 		tooltip:Show()
 		return
