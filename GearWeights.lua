@@ -1116,6 +1116,25 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 					end
 				end
 			end
+			-- The structured extended-cost API is coming back empty (0 cost
+			-- kinds) despite extendedCost being flagged true, so check whether
+			-- the real cost is only exposed as plain tooltip text instead -
+			-- some custom currency implementations do it that way.
+			if n > 0 then
+				if not GearWeightsVendorDiagTooltip then
+					GearWeightsVendorDiagTooltip = CreateFrame("GameTooltip", "GearWeightsVendorDiagTooltip", nil, "GameTooltipTemplate")
+				end
+				GearWeightsVendorDiagTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+				GearWeightsVendorDiagTooltip:SetMerchantItem(1)
+				DEFAULT_CHAT_FRAME:AddMessage("-- Tooltip lines for item 1 --")
+				for i = 1, GearWeightsVendorDiagTooltip:NumLines() do
+					local left = _G["GearWeightsVendorDiagTooltipTextLeft" .. i]
+					local right = _G["GearWeightsVendorDiagTooltipTextRight" .. i]
+					local lt = left and left:GetText()
+					local rt = right and right:GetText()
+					DEFAULT_CHAT_FRAME:AddMessage(string.format("  L%d: left=%s right=%s", i, tostring(lt), tostring(rt)))
+				end
+			end
 		end
 	else
 		if GearWeightsUI_Toggle then GearWeightsUI_Toggle() end
