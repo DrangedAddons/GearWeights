@@ -692,6 +692,12 @@ end
 -- instead, only while shift is held (matching the native compare gesture)
 -- and only for the primary hover tooltip (not ItemRefTooltip or the
 -- ShoppingTooltips themselves, to avoid stacking compare-tooltips-on-compare-tooltips).
+-- Forward-declared so ShowWeaponReferenceTooltip below (defined before the
+-- real AppendScoreLines body further down) can call it to populate its own
+-- score/comparison lines on the reference tooltip, not just Blizzard's stock
+-- tooltip content.
+local AppendScoreLines
+
 local weaponReferenceTooltips = {}
 local weaponReferenceTooltipCount = 0
 
@@ -717,6 +723,7 @@ local function ShowWeaponReferenceTooltip(referenceLink, label)
 	local tt = weaponReferenceTooltips[weaponReferenceTooltipCount]
 	if not tt then
 		tt = CreateFrame("GameTooltip", "GearWeightsReferenceTooltip" .. weaponReferenceTooltipCount, nil, "GameTooltipTemplate")
+		tt:SetScale(0.8)
 		weaponReferenceTooltips[weaponReferenceTooltipCount] = tt
 	end
 	local prev = weaponReferenceTooltips[weaponReferenceTooltipCount - 1]
@@ -725,6 +732,9 @@ local function ShowWeaponReferenceTooltip(referenceLink, label)
 	tt:ClearAllPoints()
 	tt:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 6, 0)
 	tt:SetHyperlink(referenceLink)
+	-- This is a plain GameTooltip Blizzard never routes through our normal
+	-- hooks, so it needs its own score/comparison lines added directly.
+	AppendScoreLines(tt, referenceLink)
 	tt:AddLine(" ")
 	tt:AddLine("|cff888888GearWeights reference: " .. label .. "|r")
 	tt:Show()
@@ -732,7 +742,7 @@ end
 
 GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
 
-local function AppendScoreLines(tooltip, itemLink)
+AppendScoreLines = function(tooltip, itemLink)
 	if not itemLink then return end
 
 	-- Only the primary hover tooltip, and only while shift is held (matching
@@ -809,12 +819,17 @@ local function AppendScoreLines(tooltip, itemLink)
 
 	-- If this item is already equipped in one of its own slots (e.g. this is
 	-- your currently-worn ring, shown via shift-hover compare), comparing it
-	-- against whatever's in the *other* ring/trinket/weapon slot is a real
-	-- number but a misleading one here - it looks like it's judging this item
-	-- against the thing you're actually considering, when it isn't. Just show
-	-- the plain score instead of a comparison that isn't about that decision.
+	-- against whatever's in the *other* ring/trinket slot is a real number but
+	-- a misleading one here - it looks like it's judging this item against
+	-- the thing you're actually considering, when it isn't. Just show the
+	-- plain score instead of a comparison that isn't about that decision.
+	-- Main Hand/Off Hand are exempted: the per-slot loop below already skips
+	-- a misleading self-comparison line for them specifically, but still
+	-- needs to run so the Combo vs Two-Hand line shows even when you're
+	-- looking at whatever's currently in that reference box.
 	for _, slotId in ipairs(slots) do
-		if GW.GetEquippedLinkForScoring(slotId) == itemLink then
+		if slotId ~= INVSLOT_MAINHAND and slotId ~= INVSLOT_OFFHAND
+			and GW.GetEquippedLinkForScoring(slotId) == itemLink then
 			tooltip:Show()
 			return
 		end
