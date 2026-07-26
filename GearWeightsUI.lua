@@ -1884,8 +1884,10 @@ local function CreateMainFrame()
 	-- in GearWeightsLoot.lua) - locking freezes it against temporary
 	-- quest-required weapon swaps instead of always following live gear.
 	--------------------------------------------------------------------
+	local weaponSlotButtonIndex = 0
 	local function CreateWeaponSlotButton(anchorTo)
-		local button = CreateFrame("Button", nil, dungeonRankPanel, "ItemButtonTemplate")
+		weaponSlotButtonIndex = weaponSlotButtonIndex + 1
+		local button = CreateFrame("Button", "GearWeightsWeaponSlotButton" .. weaponSlotButtonIndex, dungeonRankPanel, "ItemButtonTemplate")
 		button:SetSize(30, 30)
 		if anchorTo then
 			button:SetPoint("LEFT", anchorTo, "RIGHT", 4, 0)
