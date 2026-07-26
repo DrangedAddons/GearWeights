@@ -711,6 +711,23 @@ local function GetReferenceTooltipChainStart()
 	return GameTooltip
 end
 
+-- Whether a tracked weapon box currently mirrors what's physically equipped -
+-- if so, Blizzard's own native "Currently Equipped" compare tooltip already
+-- shows this exact item on screen, so spawning our own reference tooltip for
+-- it too would just be a second window for the same weapon. A box that's
+-- locked to something different (or empty) never matches here, so it still
+-- gets its own reference tooltip - nothing else on screen would show it
+-- otherwise. This is a plain, synchronous inventory lookup - not state
+-- written by another tooltip hook - so it carries none of the timing
+-- dependency that caused the earlier combo-value race condition.
+local function IsWeaponBoxShownNatively(box, link)
+	if not link then return false end
+	if box == "offHand" then
+		return link == GetInventoryItemLink("player", INVSLOT_OFFHAND)
+	end
+	return link == GetInventoryItemLink("player", INVSLOT_MAINHAND)
+end
+
 -- comparisons is a list of { score=, vsScore=, prefix= } - each rendered as
 -- its own "prefix: Upgrade/Downgrade (+X)" line, always candidate-relative
 -- (score is always the item you're actually considering, vsScore is whatever
@@ -719,16 +736,9 @@ end
 -- more than one line - e.g. the Main-Hand box shows both its own direct
 -- comparison AND the resulting combo-vs-Two-Hand comparison.
 --
--- Always shown, even if Blizzard's native compare tooltip happens to be
--- showing this exact item too (a previous version skipped it as a "duplicate"
--- - but Blizzard's version can only ever reflect your plain existing
--- loadout, never whatever else you're also evaluating right now, since it
--- has no way to know that. Trying to bridge that via shared state read by a
--- separate tooltip hook firing at an uncertain time was a real race
--- condition - the same item's combo math would flip between two different
--- values depending on incidental timing. Showing our own reference alongside
--- Blizzard's occasionally-redundant one is a small visual cost for always
--- being correct.
+-- Callers skip calling this at all (via IsWeaponBoxShownNatively) when the
+-- box being referenced is already visible in Blizzard's own native compare
+-- tooltip - no need to duplicate a window that's already on screen.
 local function ShowWeaponReferenceTooltip(referenceLink, label, comparisons)
 	if not referenceLink then return end
 	weaponReferenceTooltipCount = weaponReferenceTooltipCount + 1
@@ -767,8 +777,6 @@ GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
 
 local function AppendScoreLines(tooltip, itemLink)
 	if not itemLink then return end
-
-	local isNativeCompareTooltip = tooltip == ShoppingTooltip1 or tooltip == ShoppingTooltip2
 
 	-- Only the primary hover tooltip, and only while shift is held (matching
 	-- the native compare gesture), ever shows the supplementary reference
@@ -813,22 +821,6 @@ local function AppendScoreLines(tooltip, itemLink)
 		-- currently in the Two-Hand box) is meaningless and skipped, but the
 		-- combo comparison below is still real, useful information even then.
 		local isOwnTwoHandReference = twoHandLink == itemLink
-		-- Blizzard's native "Currently Equipped" tooltip runs this same 2H
-		-- branch independently whenever the tracked Two-Hand item happens to
-		-- be equipped, showing self-referential combo math ("Combo vs
-		-- Two-Hand: Downgrade"). When that's ALSO true while shift is held,
-		-- our own reference chain (elsewhere, triggered by whatever candidate
-		-- is actually being hovered) shows this exact item again with
-		-- candidate-relative framing instead - two tooltips for one weapon,
-		-- with differently-signed lines, reads as a bug even though both
-		-- numbers are individually correct. Skip the native tooltip's lines
-		-- in that case. This is a plain comparison against already-persisted
-		-- box state, not data written by a sibling hook mid-frame, so it
-		-- carries none of the previous race condition's risk.
-		if isOwnTwoHandReference and isNativeCompareTooltip and IsShiftKeyDown() then
-			tooltip:Show()
-			return
-		end
 		if not twoHandLink and not mhLink and not ohLink then
 			tooltip:AddLine(mhIgnoreReason and ("|cff888888Upgrade (weapon slots empty) (" .. mhIgnoreReason .. ")|r") or "|cff00ff00Upgrade (weapon slots empty)|r")
 		else
@@ -868,13 +860,13 @@ local function AppendScoreLines(tooltip, itemLink)
 				local comboInfo = { info = string.format("Main-Hand + Off-Hand Combo: %.1f", comboScore) }
 				local comboComparison = { score = comboScore, vsScore = score,
 					prefix = string.format("Combo vs Two-Hand %.1f: ", score) }
-				if mhLink then
+				if mhLink and not IsWeaponBoxShownNatively("mainHand", mhLink) then
 					ShowWeaponReferenceTooltip(mhLink, "Main-Hand", { comboInfo, comboComparison })
 				end
-				if ohLink then
+				if ohLink and not IsWeaponBoxShownNatively("offHand", ohLink) then
 					ShowWeaponReferenceTooltip(ohLink, "Off-Hand", { comboInfo, comboComparison })
 				end
-				if not isOwnTwoHandReference then
+				if not isOwnTwoHandReference and not IsWeaponBoxShownNatively("twoHand", twoHandLink) then
 					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand", { {
 						score = score, vsScore = twoHandScore,
 						prefix = string.format("vs Two-Hand %.1f: ", twoHandScore),
@@ -992,27 +984,27 @@ local function AppendScoreLines(tooltip, itemLink)
 						prefix = string.format("Combo vs Two-Hand %.1f: ", twoHandScore) },
 				}
 				if slotId == INVSLOT_MAINHAND then
-					if mhLink and mhLink ~= itemLink and mhScore then
+					if mhLink and mhLink ~= itemLink and mhScore and not IsWeaponBoxShownNatively("mainHand", mhLink) then
 						ShowWeaponReferenceTooltip(mhLink, "Main-Hand", {
 							{ score = score, vsScore = mhScore, prefix = string.format("vs Main-Hand %.1f: ", mhScore) },
 							comboComparisons[1], comboComparisons[2],
 						})
 					end
-					if ohLink then
+					if ohLink and not IsWeaponBoxShownNatively("offHand", ohLink) then
 						ShowWeaponReferenceTooltip(ohLink, "Off-Hand", comboComparisons)
 					end
 				else
-					if mhLink then
+					if mhLink and not IsWeaponBoxShownNatively("mainHand", mhLink) then
 						ShowWeaponReferenceTooltip(mhLink, "Main-Hand", comboComparisons)
 					end
-					if ohLink and ohLink ~= itemLink and ohScore then
+					if ohLink and ohLink ~= itemLink and ohScore and not IsWeaponBoxShownNatively("offHand", ohLink) then
 						ShowWeaponReferenceTooltip(ohLink, "Off-Hand", {
 							{ score = score, vsScore = ohScore, prefix = string.format("vs Off-Hand %.1f: ", ohScore) },
 							comboComparisons[1], comboComparisons[2],
 						})
 					end
 				end
-				if not shownTwoHandReference then
+				if not shownTwoHandReference and not IsWeaponBoxShownNatively("twoHand", twoHandLink) then
 					shownTwoHandReference = true
 					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand", comboComparisons)
 				end
