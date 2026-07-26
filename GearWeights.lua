@@ -183,7 +183,7 @@ local slotsForEquipLoc = {
 local slotLabels = {
 	[INVSLOT_FINGER1] = "Ring 1", [INVSLOT_FINGER2] = "Ring 2",
 	[INVSLOT_TRINKET1] = "Trinket 1", [INVSLOT_TRINKET2] = "Trinket 2",
-	[INVSLOT_MAINHAND] = "Main Hand", [INVSLOT_OFFHAND] = "Off Hand",
+	[INVSLOT_MAINHAND] = "Main-Hand", [INVSLOT_OFFHAND] = "Off-Hand",
 }
 
 -- Shared with GearWeightsUI.lua (Settings tab checklist) and the character
@@ -194,7 +194,7 @@ GW.SLOT_LOCK_LABEL = {
 	[INVSLOT_HAND] = "Hands", [INVSLOT_WAIST] = "Waist", [INVSLOT_LEGS] = "Legs",
 	[INVSLOT_FEET] = "Feet", [INVSLOT_FINGER1] = "Ring 1", [INVSLOT_FINGER2] = "Ring 2",
 	[INVSLOT_TRINKET1] = "Trinket 1", [INVSLOT_TRINKET2] = "Trinket 2",
-	[INVSLOT_MAINHAND] = "Main Hand", [INVSLOT_OFFHAND] = "Off Hand", [INVSLOT_RANGED] = "Ranged",
+	[INVSLOT_MAINHAND] = "Main-Hand", [INVSLOT_OFFHAND] = "Off-Hand", [INVSLOT_RANGED] = "Ranged",
 }
 GW.LOCKABLE_SLOT_ORDER = {
 	INVSLOT_HEAD, INVSLOT_NECK, INVSLOT_SHOULDER, INVSLOT_BACK, INVSLOT_CHEST,
@@ -241,13 +241,13 @@ function GW.ToggleSlotLockForItem(itemLink)
 	end
 end
 
--- A 2H weapon occupies both hands, so the Off Hand slot reading "empty" while
+-- A 2H weapon occupies both hands, so the Off-Hand slot reading "empty" while
 -- one's equipped doesn't mean it's actually free to equip into right now -
--- it's blocked, not available. Without this check, any Off Hand-capable item
+-- it's blocked, not available. Without this check, any Off-Hand-capable item
 -- (shields, one-hand weapons, held items) would score as a free "slot empty"
 -- upgrade even though equipping it would first require replacing the 2H.
 -- This is about real physical blocking right now, so it checks live equipped
--- gear directly - not the Main Hand reference box, which can be locked to (or
+-- gear directly - not the Main-Hand reference box, which can be locked to (or
 -- still remembering) a 1H weapon while you're actually wielding a 2H live.
 local function IsMainHandTwoHanded()
 	local mhLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
@@ -621,8 +621,8 @@ end
 -- isn't equippable, or the best-case score difference vs whatever it could
 -- replace, otherwise. usable is false if your class can't use this item at
 -- all (score/diff also nil in that case). flipsLoadout is true only for a
--- Main Hand/Off Hand/Two-Hand weapon candidate that would change which of
--- your two remembered weapon loadouts (2H, or Main Hand + Off Hand combo)
+-- Main-Hand/Off-Hand/Two-Hand weapon candidate that would change which of
+-- your two remembered weapon loadouts (2H, or Main-Hand + Off-Hand combo)
 -- scores higher - see GW.CheckWeaponLoadoutFlip - since that's an important
 -- signal a plain per-slot diff can miss entirely. Used by the instance loot
 -- list; tooltips use their own more detailed breakdown above.
@@ -700,6 +700,14 @@ local function ResetWeaponReferenceTooltips()
 	weaponReferenceTooltipCount = 0
 end
 
+-- Set while the primary hover tooltip (shift held) is showing a Main
+-- Hand/Off-Hand-type item - lets the Two-Hand item's OWN tooltip (whether
+-- that's Blizzard's native compare or ours) fold that candidate into its
+-- combo math too, instead of only ever reflecting your existing, unmodified
+-- loadout - otherwise its "vs combo" number goes stale the moment you're
+-- also evaluating a Main-Hand/Off-Hand item at the same time.
+local activeCandidateMainHandScore, activeCandidateOffHandScore
+
 -- Blizzard's native ShoppingTooltip1/2 already sit to the right of GameTooltip
 -- (whichever is shown depends on the hovered item's equip type) - ours chain
 -- further right of THOSE, in a horizontal row, rather than anchoring to
@@ -733,7 +741,7 @@ end
 -- (score is always the item you're actually considering, vsScore is whatever
 -- loadout piece this reference represents) rather than an existing-vs-existing
 -- comparison that doesn't involve the candidate at all. A reference can need
--- more than one line - e.g. the Main Hand box shows both its own direct
+-- more than one line - e.g. the Main-Hand box shows both its own direct
 -- comparison AND the resulting combo-vs-Two-Hand comparison.
 local function ShowWeaponReferenceTooltip(referenceLink, label, comparisons)
 	if not referenceLink then return end
@@ -778,6 +786,7 @@ local function AppendScoreLines(tooltip, itemLink)
 	local showReferenceTooltips = tooltip == GameTooltip and IsShiftKeyDown() and true or false
 	if tooltip == GameTooltip then
 		ResetWeaponReferenceTooltips()
+		activeCandidateMainHandScore, activeCandidateOffHandScore = nil, nil
 	end
 
 	if not GW.IsItemUsable(itemLink) then
@@ -802,7 +811,7 @@ local function AppendScoreLines(tooltip, itemLink)
 
 	-- A 2H weapon replaces both the main hand and off hand, so it's compared
 	-- against BOTH of your remembered weapon loadouts independently - your
-	-- Two-Hand reference, and your Main Hand + Off Hand combo - rather than
+	-- Two-Hand reference, and your Main-Hand + Off-Hand combo - rather than
 	-- only whichever currently scores higher, since you want to know how it
 	-- stacks up against each on its own terms.
 	if equipLoc == "INVTYPE_2HWEAPON" then
@@ -818,27 +827,38 @@ local function AppendScoreLines(tooltip, itemLink)
 			tooltip:AddLine(mhIgnoreReason and ("|cff888888Upgrade (weapon slots empty) (" .. mhIgnoreReason .. ")|r") or "|cff00ff00Upgrade (weapon slots empty)|r")
 		else
 			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
-			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
+			-- If a Main-Hand/Off-Hand item is also actively being evaluated
+			-- right now (see activeCandidateMainHandScore/OffHandScore above),
+			-- fold it into the combo instead of only ever showing your
+			-- existing, unmodified loadout - otherwise this number goes
+			-- stale the instant you're comparing something else too.
+			local mhScoreForCombo = activeCandidateMainHandScore or (mhLink and GW.GetItemScore(mhLink) or 0)
+			local ohScoreForCombo = activeCandidateOffHandScore or (ohLink and GW.GetItemScore(ohLink) or 0)
+			local comboScore = mhScoreForCombo + ohScoreForCombo
 			if not isOwnTwoHandReference then
 				AppendComparisonLine(tooltip, string.format("vs Two-Hand %.1f: ", twoHandScore), score, twoHandScore, mhIgnoreReason)
 			end
-			AppendComparisonLine(tooltip, string.format("vs Main Hand + Off Hand combo %.1f: ", comboScore), score, comboScore, mhIgnoreReason)
+			-- Framed with Combo as the subject ("Combo vs Two-Hand: Upgrade/
+			-- Downgrade"), same as every other combo comparison in this
+			-- feature, rather than "vs combo: Upgrade" from the 2H's own
+			-- perspective - one consistent sentence shape everywhere.
+			AppendComparisonLine(tooltip, string.format("Combo vs Two-Hand %.1f: ", score), comboScore, score, mhIgnoreReason)
 			-- Always show all three tracked references, regardless of which
 			-- one happens to be physically equipped right now - a locked box
 			-- is deliberately showing something you're NOT currently wearing,
 			-- so deferring to Blizzard's native "currently equipped" tooltip
 			-- would hide exactly the reference you locked it for. Fixed
-			-- order (Main Hand, then Off Hand, then Two-Hand) every time.
+			-- order (Main-Hand, then Off-Hand, then Two-Hand) every time.
 			-- ShowWeaponReferenceTooltip itself skips one that would just
 			-- duplicate whatever Blizzard's own compare tooltip already shows.
 			if showReferenceTooltips then
-				local comboComparison = { score = score, vsScore = comboScore,
-					prefix = string.format("vs Main Hand + Off Hand combo %.1f: ", comboScore) }
+				local comboComparison = { score = comboScore, vsScore = score,
+					prefix = string.format("Combo vs Two-Hand %.1f: ", score) }
 				if mhLink then
-					ShowWeaponReferenceTooltip(mhLink, "Main Hand", { comboComparison })
+					ShowWeaponReferenceTooltip(mhLink, "Main-Hand", { comboComparison })
 				end
 				if ohLink then
-					ShowWeaponReferenceTooltip(ohLink, "Off Hand", { comboComparison })
+					ShowWeaponReferenceTooltip(ohLink, "Off-Hand", { comboComparison })
 				end
 				if not isOwnTwoHandReference then
 					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand", { {
@@ -864,7 +884,7 @@ local function AppendScoreLines(tooltip, itemLink)
 	-- a misleading one here - it looks like it's judging this item against
 	-- the thing you're actually considering, when it isn't. Just show the
 	-- plain score instead of a comparison that isn't about that decision.
-	-- Main Hand/Off Hand are exempted: the per-slot loop below already skips
+	-- Main-Hand/Off-Hand are exempted: the per-slot loop below already skips
 	-- a misleading self-comparison line for them specifically, but still
 	-- needs to run so the Combo vs Two-Hand line shows even when you're
 	-- looking at whatever's currently in that reference box.
@@ -900,7 +920,7 @@ local function AppendScoreLines(tooltip, itemLink)
 			end
 		elseif not equippedLink then
 			if slotBlockedBy2H then
-				tooltip:AddLine(prefix .. "|cff888888Blocked by 2H Main Hand|r")
+				tooltip:AddLine(prefix .. "|cff888888Blocked by 2H Main-Hand|r")
 			elseif slotIgnoreReason then
 				tooltip:AddLine(prefix .. "|cff888888Upgrade (slot empty) (" .. slotIgnoreReason .. ")|r")
 			else
@@ -913,14 +933,26 @@ local function AppendScoreLines(tooltip, itemLink)
 			end
 		end
 
-		-- Weapons are a two-piece system: also compare what the Main Hand +
-		-- Off Hand total would be with this item in this slot (alongside
+		-- Weapons are a two-piece system: also compare what the Main-Hand +
+		-- Off-Hand total would be with this item in this slot (alongside
 		-- whichever tracked reference occupies the other hand) against your
 		-- Two-Hand reference - independent of what's physically equipped
 		-- right now, since the whole point of the reference boxes is to
 		-- reason about your intended loadout even if you're literally
 		-- wearing a quest weapon at this moment.
 		if slotId == INVSLOT_MAINHAND or slotId == INVSLOT_OFFHAND then
+			-- Record this as the actively-evaluated candidate for its hand,
+			-- so the Two-Hand item's own tooltip (shown separately, possibly
+			-- via Blizzard's native compare) can fold it into its combo math
+			-- too instead of only reflecting your unmodified existing loadout.
+			if tooltip == GameTooltip and showReferenceTooltips then
+				if slotId == INVSLOT_MAINHAND then
+					activeCandidateMainHandScore = score
+				else
+					activeCandidateOffHandScore = score
+				end
+			end
+
 			local mhLink = GW.GetWeaponBoxLink("mainHand")
 			local ohLink = GW.GetWeaponBoxLink("offHand")
 			local mhScore = mhLink and GW.GetItemScore(mhLink) or nil
@@ -935,16 +967,16 @@ local function AppendScoreLines(tooltip, itemLink)
 			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
 			-- The new combo total is shown explicitly (not just its diff),
 			-- so it's never ambiguous whether an embedded number belongs to
-			-- the combo or to Two-Hand - "Combo Main Hand + Off Hand 81.4:"
+			-- the combo or to Two-Hand - "Combo Main-Hand + Off-Hand 81.4:"
 			-- names its own value before "Combo vs Two-Hand 86.3:" names its.
 			local oldComboScore = (mhScore or 0) + (ohScore or 0)
-			AppendComparisonLine(tooltip, string.format("  Combo Main Hand + Off Hand %.1f: ", newComboScore), newComboScore, oldComboScore, nil)
+			AppendComparisonLine(tooltip, string.format("  Combo Main-Hand + Off-Hand %.1f: ", newComboScore), newComboScore, oldComboScore, nil)
 			AppendComparisonLine(tooltip, string.format("  Combo vs Two-Hand %.1f: ", twoHandScore), newComboScore, twoHandScore, nil)
 
 			-- Always show all three tracked references, regardless of what's
 			-- physically equipped right now (a locked box is deliberately
 			-- showing something you're not currently wearing) - fixed order
-			-- (Main Hand, then Off Hand, then Two-Hand) every time, whichever
+			-- (Main-Hand, then Off-Hand, then Two-Hand) every time, whichever
 			-- hand this candidate itself occupies. The same-hand reference is
 			-- the only one that matters individually (an upgrade there is
 			-- automatically an upgrade to the combo too), so it gets its own
@@ -953,27 +985,27 @@ local function AppendScoreLines(tooltip, itemLink)
 			if showReferenceTooltips then
 				local comboComparisons = {
 					{ score = newComboScore, vsScore = oldComboScore,
-						prefix = string.format("Combo Main Hand + Off Hand %.1f: ", newComboScore) },
+						prefix = string.format("Combo Main-Hand + Off-Hand %.1f: ", newComboScore) },
 					{ score = newComboScore, vsScore = twoHandScore,
 						prefix = string.format("Combo vs Two-Hand %.1f: ", twoHandScore) },
 				}
 				if slotId == INVSLOT_MAINHAND then
 					if mhLink and mhLink ~= itemLink and mhScore then
-						ShowWeaponReferenceTooltip(mhLink, "Main Hand", {
-							{ score = score, vsScore = mhScore, prefix = string.format("vs Main Hand %.1f: ", mhScore) },
+						ShowWeaponReferenceTooltip(mhLink, "Main-Hand", {
+							{ score = score, vsScore = mhScore, prefix = string.format("vs Main-Hand %.1f: ", mhScore) },
 							comboComparisons[1], comboComparisons[2],
 						})
 					end
 					if ohLink then
-						ShowWeaponReferenceTooltip(ohLink, "Off Hand", comboComparisons)
+						ShowWeaponReferenceTooltip(ohLink, "Off-Hand", comboComparisons)
 					end
 				else
 					if mhLink then
-						ShowWeaponReferenceTooltip(mhLink, "Main Hand", comboComparisons)
+						ShowWeaponReferenceTooltip(mhLink, "Main-Hand", comboComparisons)
 					end
 					if ohLink and ohLink ~= itemLink and ohScore then
-						ShowWeaponReferenceTooltip(ohLink, "Off Hand", {
-							{ score = score, vsScore = ohScore, prefix = string.format("vs Off Hand %.1f: ", ohScore) },
+						ShowWeaponReferenceTooltip(ohLink, "Off-Hand", {
+							{ score = score, vsScore = ohScore, prefix = string.format("vs Off-Hand %.1f: ", ohScore) },
 							comboComparisons[1], comboComparisons[2],
 						})
 					end

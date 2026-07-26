@@ -443,14 +443,14 @@ local EQUIP_LOC_TO_SLOT_CATEGORY = {
 	INVTYPE_LEGS = "Legs", INVTYPE_FEET = "Feet",
 	INVTYPE_FINGER = "Ring", INVTYPE_TRINKET = "Trinket",
 	INVTYPE_WEAPON = "One-Hand Weapon", INVTYPE_2HWEAPON = "Two-Hand Weapon",
-	INVTYPE_WEAPONMAINHAND = "Main Hand", INVTYPE_WEAPONOFFHAND = "Off Hand",
+	INVTYPE_WEAPONMAINHAND = "Main-Hand", INVTYPE_WEAPONOFFHAND = "Off-Hand",
 	INVTYPE_SHIELD = "Shield", INVTYPE_HOLDABLE = "Held In Off-hand",
 	INVTYPE_RANGED = "Ranged", INVTYPE_RANGEDRIGHT = "Ranged", INVTYPE_THROWN = "Thrown",
 	INVTYPE_RELIC = "Relic",
 }
 local SLOT_CATEGORY_ORDER = {
 	"Head", "Neck", "Shoulder", "Back", "Chest", "Wrist", "Hands", "Waist", "Legs", "Feet",
-	"Ring", "Trinket", "One-Hand Weapon", "Two-Hand Weapon", "Main Hand", "Off Hand",
+	"Ring", "Trinket", "One-Hand Weapon", "Two-Hand Weapon", "Main-Hand", "Off-Hand",
 	"Shield", "Held In Off-hand", "Ranged", "Thrown", "Relic", "Other",
 }
 -- Same collapsed-by-default rule as the zone-mode categories above.
@@ -1908,14 +1908,14 @@ local function CreateMainFrame()
 
 	--------------------------------------------------------------------
 	-- Weapon baseline display - 3 independent slot icons (Two-Hand / Main
-	-- Hand / Off Hand) mimicking the character pane's weapon slots. Each
+	-- Hand / Off-Hand) mimicking the character pane's weapon slots. Each
 	-- remembers the last relevant item seen in its own category (see
 	-- GW.SyncWeaponBoxesFromEquipped in GearWeightsLoot.lua) rather than
 	-- clearing when you swap to the other loadout, and each can be
 	-- independently locked (click) or manually set (drag an item onto it).
 	--------------------------------------------------------------------
 	local WEAPON_BOX_ORDER = { "twoHand", "mainHand", "offHand" }
-	local WEAPON_BOX_LABELS = { twoHand = "Two-Hand Weapon", mainHand = "Main Hand", offHand = "Off Hand" }
+	local WEAPON_BOX_LABELS = { twoHand = "Two-Hand Weapon", mainHand = "Main-Hand", offHand = "Off-Hand" }
 
 	local weaponSlotButtonIndex = 0
 	local function CreateWeaponSlotButton(anchorTo)
