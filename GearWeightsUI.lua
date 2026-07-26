@@ -740,7 +740,9 @@ RefreshDungeonRankPanel = function()
 						end
 						for _, bossName in ipairs(bossOrder) do
 							table.insert(items, { isBossHeader = true, bossName = bossName })
-							for _, entry in ipairs(byBoss[bossName]) do
+							local bossEntries = byBoss[bossName]
+							table.sort(bossEntries, function(a, b) return a.diff > b.diff end)
+							for _, entry in ipairs(bossEntries) do
 								table.insert(items, { isSubItem = true, itemLink = entry.itemLink, diff = entry.diff, tier = entry.tier })
 							end
 						end
@@ -845,6 +847,9 @@ local function RenderLootRows()
 			table.insert(groups, group)
 		end
 		table.insert(group.entries, entry)
+	end
+	for _, group in ipairs(groups) do
+		table.sort(group.entries, function(a, b) return a.diff > b.diff end)
 	end
 
 	local orderedGroups = groups
