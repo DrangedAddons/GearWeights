@@ -557,14 +557,22 @@ end
 -- + hover tooltip where possible - the same icon/tooltip as the bottom-bar
 -- Mark of Triumph tracker for that currency specifically - rather than plain
 -- text, since neither is otherwise interactive or visually distinct at a glance.
-local function SetDungeonRowPrice(row, itemLink)
-	-- countsText's box can be much wider than its actual text (the shared
-	-- column layout pass stretches it to match the widest row in the current
-	-- view), so anchor to the real rendered text width instead of the box's
-	-- right edge - otherwise the icon ends up positioned past where the
-	-- visible text actually ends, often off the row entirely.
-	row.priceIcon:ClearAllPoints()
-	row.priceIcon:SetPoint("LEFT", row.countsText, "LEFT", row.countsText:GetStringWidth() + 6, 0)
+-- sharedMode skips the per-row anchor below - used in the zone view, where a
+-- later pass aligns every vendor row's icon to one shared position instead
+-- (countsText there is diff-only text of near-identical width, so per-row
+-- natural width just introduces a few pixels of jitter row to row; the slot
+-- view's countsText also embeds a variable-length source location, where
+-- per-row natural width is the correct behavior instead).
+local function SetDungeonRowPrice(row, itemLink, sharedMode)
+	if not sharedMode then
+		-- countsText's box can be much wider than its actual text (the shared
+		-- column layout pass stretches it to match the widest row in the
+		-- current view), so anchor to the real rendered text width instead of
+		-- the box's right edge - otherwise the icon ends up positioned past
+		-- where the visible text actually ends, often off the row entirely.
+		row.priceIcon:ClearAllPoints()
+		row.priceIcon:SetPoint("LEFT", row.countsText, "LEFT", row.countsText:GetStringWidth() + 6, 0)
+	end
 
 	local parts, status = GW.GetVendorPriceParts(itemLink)
 	if not parts then
@@ -693,7 +701,7 @@ local function SetDungeonRankRowAsSubItem(row, item)
 	row.nameText:SetText("            |cffffffff" .. (itemName or item.itemLink) .. "|r")
 	if item.isVendorItem then
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r", item.diff))
-		SetDungeonRowPrice(row, item.itemLink)
+		SetDungeonRowPrice(row, item.itemLink, true)
 	else
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888(%s)|r",
 			item.diff, TIER_LABEL[item.tier] or item.tier))
@@ -901,6 +909,7 @@ RefreshDungeonRankPanel = function()
 	dungeonRankContent:SetHeight(math.max(#items * DUNGEON_RANK_ROW_HEIGHT, VISIBLE_ROWS * DUNGEON_RANK_ROW_HEIGHT))
 
 	local rowEntries = {}
+	local vendorPriceRows = {}
 	for i, item in ipairs(items) do
 		local row = dungeonRankRowPool[i]
 		if not row then
@@ -919,6 +928,7 @@ RefreshDungeonRankPanel = function()
 			isColumnRow = false
 		elseif item.isSubItem then
 			SetDungeonRankRowAsSubItem(row, item)
+			if item.isVendorItem then table.insert(vendorPriceRows, row) end
 		elseif item.isSlotHeader then
 			SetDungeonRankRowAsSlotHeader(row, item.category, item.count)
 			isColumnRow = false
@@ -938,6 +948,19 @@ RefreshDungeonRankPanel = function()
 	-- split across all of them, so the counts column lines up at the same
 	-- x position on every row instead of each row picking its own.
 	LayoutDungeonRowColumnsShared(rowEntries, rowWidth)
+
+	-- Zone-view vendor rows only ever show a short diff value in countsText,
+	-- so align every price icon to the widest one instead of each row's own
+	-- (near-identical but not pixel-identical) natural text width - gives a
+	-- clean lined-up column instead of a few pixels of jitter row to row.
+	local maxCountsWidth = 0
+	for _, row in ipairs(vendorPriceRows) do
+		maxCountsWidth = math.max(maxCountsWidth, row.countsText:GetStringWidth() or 0)
+	end
+	for _, row in ipairs(vendorPriceRows) do
+		row.priceIcon:ClearAllPoints()
+		row.priceIcon:SetPoint("LEFT", row.countsText, "LEFT", maxCountsWidth + 6, 0)
+	end
 end
 
 dungeonRankPollFrame:SetScript("OnUpdate", function(self, elapsed)
