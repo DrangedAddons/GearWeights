@@ -532,11 +532,13 @@ end
 
 local CATEGORY_LABEL = { dungeon = "Dungeons", raid = "Raids", vendor = "Vendors" }
 
-local function SetDungeonRankRowAsHeader(row, category, count)
+local function SetDungeonRankRowAsHeader(row, category, count, itemTotal)
 	local arrow = dungeonRankCollapsed[category] and "+" or "-"
 	local label = CATEGORY_LABEL[category] or category
 	SetDungeonRowFullWidthName(row)
-	row.nameText:SetText(string.format("|cffffff00[%s] %s (%d)|r", arrow, label, count))
+	row.nameText:SetText(string.format("|cffffff00[%s] %s (%d %s, %d %s)|r", arrow, label,
+		count, count == 1 and "location" or "locations",
+		itemTotal, itemTotal == 1 and "item" or "items"))
 	row.countsText:SetText("")
 	row:EnableMouse(true)
 	row:SetScript("OnEnter", nil)
@@ -760,7 +762,9 @@ RefreshDungeonRankPanel = function()
 		for _, category in ipairs({ "dungeon", "raid", "vendor" }) do
 			local list = byCategory[category]
 			if #list > 0 then
-				table.insert(items, { isHeader = true, category = category, count = #list })
+				local itemTotal = 0
+				for _, r in ipairs(list) do itemTotal = itemTotal + r.total end
+				table.insert(items, { isHeader = true, category = category, count = #list, itemTotal = itemTotal })
 				if not dungeonRankCollapsed[category] then AppendZoneRows(list) end
 			end
 		end
@@ -784,7 +788,7 @@ RefreshDungeonRankPanel = function()
 		end
 		local isColumnRow = true
 		if item.isHeader then
-			SetDungeonRankRowAsHeader(row, item.category, item.count)
+			SetDungeonRankRowAsHeader(row, item.category, item.count, item.itemTotal)
 			isColumnRow = false
 		elseif item.isBossHeader then
 			SetDungeonRankRowAsBossHeader(row, item.bossName)
