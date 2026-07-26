@@ -835,8 +835,16 @@ function GW.FormatVendorPrice(itemLink)
 			table.insert(parts, string.format("%d %s", cost.amount, name))
 		end
 	end
-	if #parts == 0 then return "|cff00ff00Free|r" end
-	return table.concat(parts, ", ")
+	if #parts > 0 then return table.concat(parts, ", ") end
+
+	-- Some custom-currency vendors (confirmed on this server) flag
+	-- extendedCost true but expose zero cost details through either the
+	-- structured API or the tooltip text - there's no way for an addon to
+	-- learn the real price here, so say so plainly instead of calling it Free.
+	if info.extendedCost then
+		return "|cff888888costs a special currency (amount not exposed by the game client)|r"
+	end
+	return "|cff00ff00Free|r"
 end
 
 local function ScanOpenMerchant()
@@ -856,7 +864,7 @@ local function ScanOpenMerchant()
 					table.insert(costs, { amount = costAmount, link = costLink, currencyName = currencyName })
 				end
 			end
-			GearWeightsDB.vendorPrices[itemId] = { copper = price, costs = costs }
+			GearWeightsDB.vendorPrices[itemId] = { copper = price, costs = costs, extendedCost = extendedCost and true or false }
 		end
 	end
 end
