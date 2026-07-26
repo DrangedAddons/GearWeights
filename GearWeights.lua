@@ -336,6 +336,86 @@ local function IsRelicUsable(itemLink)
 	return true
 end
 
+-- Unique-Equipped isn't exposed by GetItemStats()/GetItemInfo() at all, so
+-- this is the other case that needs a real tooltip scan. Returns the max
+-- number of copies of this exact item that can be equipped at once (1 for
+-- plain "Unique"/"Unique-Equipped", or the printed count for e.g. some
+-- heirlooms' "Unique-Equipped: <name> (2)"), or nil if it isn't unique at all.
+local uniqueCapCache = {}
+local uniqueScanTip
+function GW.GetItemUniqueCap(itemLink)
+	if not itemLink then return nil end
+	local cached = uniqueCapCache[itemLink]
+	if cached ~= nil then return cached or nil end
+
+	if not uniqueScanTip then
+		uniqueScanTip = CreateFrame("GameTooltip", "GearWeightsUniqueScanTooltip", nil, "GameTooltipTemplate")
+		uniqueScanTip:SetOwner(UIParent, "ANCHOR_NONE")
+	end
+	uniqueScanTip:ClearLines()
+	local ok = pcall(uniqueScanTip.SetHyperlink, uniqueScanTip, itemLink)
+	local cap
+	if ok then
+		for i = 1, uniqueScanTip:NumLines() do
+			local fs = _G["GearWeightsUniqueScanTooltipTextLeft" .. i]
+			local text = fs and fs:GetText()
+			if text then
+				if text == ITEM_UNIQUE_EQUIPPABLE or text == ITEM_UNIQUE then
+					cap = 1
+					break
+				end
+				local count = text:match("^Unique%-Equipped.*%((%d+)%)$") or text:match("^Unique .*%((%d+)%)$")
+				if count then
+					cap = tonumber(count)
+					break
+				end
+			end
+		end
+	end
+	uniqueCapCache[itemLink] = cap or false
+	return cap
+end
+
+-- Given a Unique-Equipped candidate item and the slots it could occupy,
+-- returns the subset actually available to compare against: every slot,
+-- unless you already own `cap` or more copies of an item sharing its exact
+-- name (matched by name - the same heuristic the game itself effectively
+-- uses) - in which case only the slot(s) already holding that name are real
+-- options, since equipping this one into any other slot would put you over
+-- the limit. Second return value is true when this narrowed the choice, so
+-- callers can note "would be an upgrade, but blocked by Unique-Equip" for
+-- the slots that got excluded.
+function GW.GetUniqueEligibleSlots(itemLink, slots)
+	-- Only equip types with more than one physical slot (rings, trinkets,
+	-- weapons) can even have this conflict - a single-slot type never has an
+	-- "other slot" to wrongly compare against, so skip the tooltip scan
+	-- entirely there rather than paying its cost on every piece of gear.
+	if #slots <= 1 then return slots, false end
+
+	local cap = GW.GetItemUniqueCap(itemLink)
+	if not cap then return slots, false end
+	local itemName = GetItemInfo(itemLink)
+	if not itemName then return slots, false end
+
+	local sameNameSlots = {}
+	for _, slotId in ipairs(slots) do
+		local equippedLink = GetInventoryItemLink("player", slotId)
+		if equippedLink then
+			if equippedLink == itemLink then
+				table.insert(sameNameSlots, slotId)
+			else
+				local equippedName = GetItemInfo(equippedLink)
+				if equippedName == itemName then table.insert(sameNameSlots, slotId) end
+			end
+		end
+	end
+
+	if #sameNameSlots >= cap then
+		return sameNameSlots, (#sameNameSlots < #slots)
+	end
+	return slots, false
+end
+
 function GW.IsItemUsable(itemLink, knownEquipLoc)
 	if not itemLink then return true end
 
@@ -563,6 +643,12 @@ function GW.GetBestUpgradeDiff(itemLink)
 	local slots = slotsForEquipLoc[equipLoc]
 	if not slots or #slots == 0 then return score, nil end
 
+	-- Unique-Equipped items can't have a second copy equipped once you're at
+	-- the cap - if so, only the slot(s) already holding a copy of the exact
+	-- same item are actually replaceable; comparing against an unrelated item
+	-- in some other slot would suggest an upgrade you couldn't actually equip.
+	slots = GW.GetUniqueEligibleSlots(itemLink, slots)
+
 	local bestDiff
 	for _, slotId in ipairs(slots) do
 		if not GW.GetSlotIgnoreReason(slotId) then
@@ -647,13 +733,28 @@ local function AppendScoreLines(tooltip, itemLink)
 		end
 	end
 
+	-- Unique-Equipped: if you already own this item's cap worth of copies
+	-- elsewhere, the slot(s) NOT already holding a copy of it aren't real
+	-- options - equipping it there would put you over the limit. Still show
+	-- what it would have scored, just don't call it a real Upgrade there.
+	local eligibleSlots, uniqueNarrowed = GW.GetUniqueEligibleSlots(itemLink, slots)
+	local uniqueEligible = {}
+	for _, s in ipairs(eligibleSlots) do uniqueEligible[s] = true end
+
 	for _, slotId in ipairs(slots) do
 		local equippedLink = GetInventoryItemLink("player", slotId)
 		local label = slotLabels[slotId]
 		local prefix = label and (label .. ": ") or ""
 		local slotBlockedBy2H = slotId == INVSLOT_OFFHAND and IsMainHandTwoHanded()
 		local slotIgnoreReason = GW.GetSlotIgnoreReason(slotId)
-		if not equippedLink then
+		if uniqueNarrowed and not uniqueEligible[slotId] and equippedLink and equippedLink ~= itemLink then
+			local equippedScore = GW.GetItemScore(equippedLink)
+			if equippedScore then
+				local diff = score - equippedScore
+				local wouldBeNote = diff > 0.05 and string.format(" - would be +%.1f", diff) or ""
+				tooltip:AddLine(prefix .. "|cff888888Blocked by Unique-Equip limit" .. wouldBeNote .. "|r")
+			end
+		elseif not equippedLink then
 			if slotBlockedBy2H then
 				tooltip:AddLine(prefix .. "|cff888888Blocked by 2H Main Hand|r")
 			elseif slotIgnoreReason then
