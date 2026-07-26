@@ -933,6 +933,12 @@ local function AppendScoreLines(tooltip, itemLink)
 			end
 			local twoHandLink = GW.GetWeaponBoxLink("twoHand")
 			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
+			-- The new combo total is shown explicitly (not just its diff),
+			-- so it's never ambiguous whether an embedded number belongs to
+			-- the combo or to Two-Hand - "Combo Main Hand + Off Hand 81.4:"
+			-- names its own value before "Combo vs Two-Hand 86.3:" names its.
+			local oldComboScore = (mhScore or 0) + (ohScore or 0)
+			AppendComparisonLine(tooltip, string.format("  Combo Main Hand + Off Hand %.1f: ", newComboScore), newComboScore, oldComboScore, nil)
 			AppendComparisonLine(tooltip, string.format("  Combo vs Two-Hand %.1f: ", twoHandScore), newComboScore, twoHandScore, nil)
 
 			-- Always show all three tracked references, regardless of what's
@@ -941,37 +947,40 @@ local function AppendScoreLines(tooltip, itemLink)
 			-- (Main Hand, then Off Hand, then Two-Hand) every time, whichever
 			-- hand this candidate itself occupies. The same-hand reference is
 			-- the only one that matters individually (an upgrade there is
-			-- automatically an upgrade to the combo too), so it gets both its
-			-- own direct comparison AND the combo-vs-Two-Hand comparison;
-			-- the other hand and Two-Hand only get the combo comparison,
-			-- since neither is directly comparable to a single-hand item.
+			-- automatically an upgrade to the combo too), so it gets its own
+			-- direct comparison too, on top of the two combo lines every
+			-- reference shows.
 			if showReferenceTooltips then
-				local comboComparison = { score = newComboScore, vsScore = twoHandScore,
-					prefix = string.format("Combo vs Two-Hand %.1f: ", twoHandScore) }
+				local comboComparisons = {
+					{ score = newComboScore, vsScore = oldComboScore,
+						prefix = string.format("Combo Main Hand + Off Hand %.1f: ", newComboScore) },
+					{ score = newComboScore, vsScore = twoHandScore,
+						prefix = string.format("Combo vs Two-Hand %.1f: ", twoHandScore) },
+				}
 				if slotId == INVSLOT_MAINHAND then
 					if mhLink and mhLink ~= itemLink and mhScore then
 						ShowWeaponReferenceTooltip(mhLink, "Main Hand", {
 							{ score = score, vsScore = mhScore, prefix = string.format("vs Main Hand %.1f: ", mhScore) },
-							comboComparison,
+							comboComparisons[1], comboComparisons[2],
 						})
 					end
 					if ohLink then
-						ShowWeaponReferenceTooltip(ohLink, "Off Hand", { comboComparison })
+						ShowWeaponReferenceTooltip(ohLink, "Off Hand", comboComparisons)
 					end
 				else
 					if mhLink then
-						ShowWeaponReferenceTooltip(mhLink, "Main Hand", { comboComparison })
+						ShowWeaponReferenceTooltip(mhLink, "Main Hand", comboComparisons)
 					end
 					if ohLink and ohLink ~= itemLink and ohScore then
 						ShowWeaponReferenceTooltip(ohLink, "Off Hand", {
 							{ score = score, vsScore = ohScore, prefix = string.format("vs Off Hand %.1f: ", ohScore) },
-							comboComparison,
+							comboComparisons[1], comboComparisons[2],
 						})
 					end
 				end
 				if not shownTwoHandReference then
 					shownTwoHandReference = true
-					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand", { comboComparison })
+					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand", comboComparisons)
 				end
 			end
 		end
