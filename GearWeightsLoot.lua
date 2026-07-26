@@ -493,6 +493,9 @@ local function EnsureLootSettings()
 	if GearWeightsDB.settings.glowQuestVendorValue == nil then
 		GearWeightsDB.settings.glowQuestVendorValue = true
 	end
+	if GearWeightsDB.settings.glowVendorItems == nil then
+		GearWeightsDB.settings.glowVendorItems = true
+	end
 	if GearWeightsDB.settings.dungeonRankNormal == nil then
 		GearWeightsDB.settings.dungeonRankNormal = true
 	end
@@ -586,6 +589,16 @@ end
 function GW.SetQuestVendorGlowEnabled(enabled)
 	EnsureLootSettings()
 	GearWeightsDB.settings.glowQuestVendorValue = enabled
+end
+
+function GW.IsVendorGlowEnabled()
+	EnsureLootSettings()
+	return GearWeightsDB.settings.glowVendorItems
+end
+
+function GW.SetVendorGlowEnabled(enabled)
+	EnsureLootSettings()
+	GearWeightsDB.settings.glowVendorItems = enabled
 end
 
 function GW.SetTargetLootEnabled(enabled)

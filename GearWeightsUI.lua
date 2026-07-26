@@ -1348,6 +1348,31 @@ questRewardWatcher:SetScript("OnEvent", function()
 	questRewardWarmFrame:Show()
 end)
 
+-- Vendor items get the same glow treatment as loot/quest rewards. Merchant
+-- slots are simpler than loot/quest ones - always exactly
+-- MERCHANT_ITEMS_PER_PAGE numbered buttons that exist whether or not they're
+-- currently showing an item, populated synchronously by Blizzard, so no
+-- warm-retry loop is needed the way loot/quest rewards required.
+local function RefreshVendorGlows()
+	local vendorGlow = GW.IsVendorGlowEnabled()
+	for i = 1, (MERCHANT_ITEMS_PER_PAGE or 10) do
+		local button = _G["MerchantItem" .. i .. "ItemButton"]
+		if button then
+			local link = vendorGlow and GetMerchantItemLink(i)
+			if link and IsItemLinkAnUpgrade(link) then
+				ShowButtonGlow(button, GLOW_COLOR_UPGRADE)
+			else
+				HideButtonGlow(button)
+			end
+		end
+	end
+end
+
+local vendorGlowWatcher = CreateFrame("Frame")
+vendorGlowWatcher:RegisterEvent("MERCHANT_SHOW")
+vendorGlowWatcher:RegisterEvent("MERCHANT_UPDATE")
+vendorGlowWatcher:SetScript("OnEvent", RefreshVendorGlows)
+
 -- Shared upgrade check for anything that might drop: prefer the AtlasLoot
 -- boss-recognized list (respects the "instance loot" glow toggle), fall back
 -- to direct scoring for anything else (respects the "world drops" toggle).
@@ -2106,8 +2131,12 @@ local function CreateMainFrame()
 		"Glow highest-value quest reward when no choice is an upgrade",
 		GW.IsQuestVendorGlowEnabled, GW.SetQuestVendorGlowEnabled)
 
+	local glowVendorCheck = CreateSettingsCheckbox(glowQuestVendorCheck, -24,
+		"Glow vendor items that are upgrades",
+		GW.IsVendorGlowEnabled, GW.SetVendorGlowEnabled)
+
 	local lockedSlotsHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	lockedSlotsHeader:SetPoint("TOPLEFT", glowQuestVendorCheck, "BOTTOMLEFT", 0, -30)
+	lockedSlotsHeader:SetPoint("TOPLEFT", glowVendorCheck, "BOTTOMLEFT", 0, -30)
 	lockedSlotsHeader:SetText("Locked Slots")
 
 	local lockedSlotsHint = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
