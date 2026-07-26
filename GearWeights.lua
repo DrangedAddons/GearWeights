@@ -700,14 +700,6 @@ local function ResetWeaponReferenceTooltips()
 	weaponReferenceTooltipCount = 0
 end
 
--- Set while the primary hover tooltip (shift held) is showing a Main
--- Hand/Off-Hand-type item - lets the Two-Hand item's OWN tooltip (whether
--- that's Blizzard's native compare or ours) fold that candidate into its
--- combo math too, instead of only ever reflecting your existing, unmodified
--- loadout - otherwise its "vs combo" number goes stale the moment you're
--- also evaluating a Main-Hand/Off-Hand item at the same time.
-local activeCandidateMainHandScore, activeCandidateOffHandScore
-
 -- Blizzard's native ShoppingTooltip1/2 already sit to the right of GameTooltip
 -- (whichever is shown depends on the hovered item's equip type) - ours chain
 -- further right of THOSE, in a horizontal row, rather than anchoring to
@@ -719,23 +711,6 @@ local function GetReferenceTooltipChainStart()
 	return GameTooltip
 end
 
--- Blizzard's native compare tooltips (ShoppingTooltip1/2) are still visible
--- alongside ours - if one of them already happens to be showing the exact
--- item we were about to add as a reference (the tracked box matches what's
--- physically equipped right now), showing it a second time via our own
--- system is a pure duplicate, not new information.
-local function IsLinkShownByNativeCompare(referenceLink)
-	if ShoppingTooltip1 and ShoppingTooltip1:IsShown() then
-		local _, link1 = ShoppingTooltip1:GetItem()
-		if link1 == referenceLink then return true end
-	end
-	if ShoppingTooltip2 and ShoppingTooltip2:IsShown() then
-		local _, link2 = ShoppingTooltip2:GetItem()
-		if link2 == referenceLink then return true end
-	end
-	return false
-end
-
 -- comparisons is a list of { score=, vsScore=, prefix= } - each rendered as
 -- its own "prefix: Upgrade/Downgrade (+X)" line, always candidate-relative
 -- (score is always the item you're actually considering, vsScore is whatever
@@ -743,9 +718,19 @@ end
 -- comparison that doesn't involve the candidate at all. A reference can need
 -- more than one line - e.g. the Main-Hand box shows both its own direct
 -- comparison AND the resulting combo-vs-Two-Hand comparison.
+--
+-- Always shown, even if Blizzard's native compare tooltip happens to be
+-- showing this exact item too (a previous version skipped it as a "duplicate"
+-- - but Blizzard's version can only ever reflect your plain existing
+-- loadout, never whatever else you're also evaluating right now, since it
+-- has no way to know that. Trying to bridge that via shared state read by a
+-- separate tooltip hook firing at an uncertain time was a real race
+-- condition - the same item's combo math would flip between two different
+-- values depending on incidental timing. Showing our own reference alongside
+-- Blizzard's occasionally-redundant one is a small visual cost for always
+-- being correct.
 local function ShowWeaponReferenceTooltip(referenceLink, label, comparisons)
 	if not referenceLink then return end
-	if IsLinkShownByNativeCompare(referenceLink) then return end
 	weaponReferenceTooltipCount = weaponReferenceTooltipCount + 1
 	local tt = weaponReferenceTooltips[weaponReferenceTooltipCount]
 	if not tt then
@@ -790,7 +775,6 @@ local function AppendScoreLines(tooltip, itemLink)
 	local showReferenceTooltips = tooltip == GameTooltip and IsShiftKeyDown() and true or false
 	if tooltip == GameTooltip then
 		ResetWeaponReferenceTooltips()
-		activeCandidateMainHandScore, activeCandidateOffHandScore = nil, nil
 	end
 
 	if not GW.IsItemUsable(itemLink) then
@@ -831,14 +815,16 @@ local function AppendScoreLines(tooltip, itemLink)
 			tooltip:AddLine(mhIgnoreReason and ("|cff888888Upgrade (weapon slots empty) (" .. mhIgnoreReason .. ")|r") or "|cff00ff00Upgrade (weapon slots empty)|r")
 		else
 			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
-			-- If a Main-Hand/Off-Hand item is also actively being evaluated
-			-- right now (see activeCandidateMainHandScore/OffHandScore above),
-			-- fold it into the combo instead of only ever showing your
-			-- existing, unmodified loadout - otherwise this number goes
-			-- stale the instant you're comparing something else too.
-			local mhScoreForCombo = activeCandidateMainHandScore or (mhLink and GW.GetItemScore(mhLink) or 0)
-			local ohScoreForCombo = activeCandidateOffHandScore or (ohLink and GW.GetItemScore(ohLink) or 0)
-			local comboScore = mhScoreForCombo + ohScoreForCombo
+			-- This 2H item's own combo math is always the plain, existing
+			-- Main-Hand + Off-Hand loadout - it never tries to fold in
+			-- whatever Main-Hand/Off-Hand item you might ALSO be evaluating
+			-- right now (a version of this once did, via state shared across
+			-- tooltip hooks - but those fire at an uncertain relative time,
+			-- so the same item's combo value would flip unpredictably. Our
+			-- own Two-Hand reference tooltip below is the reliable, always-
+			-- correct place to see the combo-including-your-other-candidate
+			-- math - it's computed directly, not through shared state.
+			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
 			if not isOwnTwoHandReference then
 				AppendComparisonLine(tooltip, string.format("vs Two-Hand %.1f: ", twoHandScore), score, twoHandScore, mhIgnoreReason)
 			end
@@ -953,18 +939,6 @@ local function AppendScoreLines(tooltip, itemLink)
 		-- reason about your intended loadout even if you're literally
 		-- wearing a quest weapon at this moment.
 		if slotId == INVSLOT_MAINHAND or slotId == INVSLOT_OFFHAND then
-			-- Record this as the actively-evaluated candidate for its hand,
-			-- so the Two-Hand item's own tooltip (shown separately, possibly
-			-- via Blizzard's native compare) can fold it into its combo math
-			-- too instead of only reflecting your unmodified existing loadout.
-			if tooltip == GameTooltip and showReferenceTooltips then
-				if slotId == INVSLOT_MAINHAND then
-					activeCandidateMainHandScore = score
-				else
-					activeCandidateOffHandScore = score
-				end
-			end
-
 			local mhLink = GW.GetWeaponBoxLink("mainHand")
 			local ohLink = GW.GetWeaponBoxLink("offHand")
 			local mhScore = mhLink and GW.GetItemScore(mhLink) or nil
