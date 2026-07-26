@@ -692,12 +692,6 @@ end
 -- instead, only while shift is held (matching the native compare gesture)
 -- and only for the primary hover tooltip (not ItemRefTooltip or the
 -- ShoppingTooltips themselves, to avoid stacking compare-tooltips-on-compare-tooltips).
--- Forward-declared so ShowWeaponReferenceTooltip below (defined before the
--- real AppendScoreLines body further down) can call it to populate its own
--- score/comparison lines on the reference tooltip, not just Blizzard's stock
--- tooltip content.
-local AppendScoreLines
-
 local weaponReferenceTooltips = {}
 local weaponReferenceTooltipCount = 0
 
@@ -717,7 +711,15 @@ local function GetReferenceTooltipChainStart()
 	return GameTooltip
 end
 
-local function ShowWeaponReferenceTooltip(referenceLink, label)
+-- candidateScore/comparisonScore/comparisonPrefix describe how the item
+-- you're actually considering (not this reference item) stacks up against
+-- whatever loadout this reference represents - e.g. on the Main Hand
+-- reference tooltip while considering a 2H, that's "the candidate vs your
+-- Main Hand + Off Hand combo", not some unrelated comparison of this
+-- reference against a different existing item. Always candidate-relative,
+-- never existing-vs-existing, so every number on screen answers the same
+-- question you actually came here to ask.
+local function ShowWeaponReferenceTooltip(referenceLink, label, candidateScore, comparisonScore, comparisonPrefix)
 	if not referenceLink then return end
 	weaponReferenceTooltipCount = weaponReferenceTooltipCount + 1
 	local tt = weaponReferenceTooltips[weaponReferenceTooltipCount]
@@ -732,9 +734,14 @@ local function ShowWeaponReferenceTooltip(referenceLink, label)
 	tt:ClearAllPoints()
 	tt:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 6, 0)
 	tt:SetHyperlink(referenceLink)
-	-- This is a plain GameTooltip Blizzard never routes through our normal
-	-- hooks, so it needs its own score/comparison lines added directly.
-	AppendScoreLines(tt, referenceLink)
+	local referenceScore = GW.GetItemScore(referenceLink)
+	if referenceScore then
+		tt:AddLine(" ")
+		tt:AddLine(string.format("GearWeights: %.1f", referenceScore), 0.4, 0.75, 1.0)
+	end
+	if candidateScore and comparisonScore then
+		AppendComparisonLine(tt, comparisonPrefix, candidateScore, comparisonScore, nil)
+	end
 	tt:AddLine(" ")
 	tt:AddLine("|cff888888GearWeights reference: " .. label .. "|r")
 	tt:Show()
@@ -742,7 +749,7 @@ end
 
 GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
 
-AppendScoreLines = function(tooltip, itemLink)
+local function AppendScoreLines(tooltip, itemLink)
 	if not itemLink then return end
 
 	-- Only the primary hover tooltip, and only while shift is held (matching
@@ -791,21 +798,23 @@ AppendScoreLines = function(tooltip, itemLink)
 		if not twoHandLink and not mhLink and not ohLink then
 			tooltip:AddLine(mhIgnoreReason and ("|cff888888Upgrade (weapon slots empty) (" .. mhIgnoreReason .. ")|r") or "|cff00ff00Upgrade (weapon slots empty)|r")
 		else
+			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
+			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
 			if not isOwnTwoHandReference then
-				local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
 				AppendComparisonLine(tooltip, "vs Two-Hand: ", score, twoHandScore, mhIgnoreReason)
 			end
-			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
 			AppendComparisonLine(tooltip, "vs Main Hand + Off Hand combo: ", score, comboScore, mhIgnoreReason)
 			-- Blizzard's native compare tooltip already shows whichever
 			-- loadout is physically equipped right now - only add the OTHER
-			-- one, rather than duplicating what's already on screen.
+			-- one, rather than duplicating what's already on screen. Every
+			-- number shown is this candidate vs that reference, never an
+			-- existing-vs-existing comparison that doesn't involve it.
 			if showReferenceTooltips then
 				if IsMainHandTwoHanded() then
-					ShowWeaponReferenceTooltip(mhLink, "Main Hand")
-					ShowWeaponReferenceTooltip(ohLink, "Off Hand")
+					ShowWeaponReferenceTooltip(mhLink, "Main Hand", score, comboScore, "vs Main Hand + Off Hand combo: ")
+					ShowWeaponReferenceTooltip(ohLink, "Off Hand", score, comboScore, "vs Main Hand + Off Hand combo: ")
 				elseif not isOwnTwoHandReference then
-					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand")
+					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand", score, twoHandScore, "vs Two-Hand: ")
 				end
 			end
 		end
@@ -897,16 +906,18 @@ AppendScoreLines = function(tooltip, itemLink)
 			-- Blizzard's native compare tooltip already shows whatever's
 			-- physically equipped for this slot - only add whichever
 			-- reference it doesn't already cover, rather than duplicating it.
+			-- Always the same candidate-vs-combo comparison already shown
+			-- above, just repeated on whichever reference tooltip is missing it.
 			if showReferenceTooltips then
 				if IsMainHandTwoHanded() then
 					if slotId == INVSLOT_MAINHAND then
-						ShowWeaponReferenceTooltip(ohLink, "Off Hand")
+						ShowWeaponReferenceTooltip(ohLink, "Off Hand", newComboScore, twoHandScore, "Combo vs Two-Hand: ")
 					else
-						ShowWeaponReferenceTooltip(mhLink, "Main Hand")
+						ShowWeaponReferenceTooltip(mhLink, "Main Hand", newComboScore, twoHandScore, "Combo vs Two-Hand: ")
 					end
 				elseif not shownTwoHandReference then
 					shownTwoHandReference = true
-					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand")
+					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand", newComboScore, twoHandScore, "Combo vs Two-Hand: ")
 				end
 			end
 		end
