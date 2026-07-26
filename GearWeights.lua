@@ -700,7 +700,18 @@ local function ResetWeaponReferenceTooltips()
 	weaponReferenceTooltipCount = 0
 end
 
-local function ShowWeaponReferenceTooltip(anchorTooltip, referenceLink, label)
+-- Blizzard's native ShoppingTooltip1/2 already sit to the right of GameTooltip
+-- (whichever is shown depends on the hovered item's equip type) - ours chain
+-- further right of THOSE, in a horizontal row, rather than anchoring to
+-- GameTooltip directly (which would land underneath/on top of Blizzard's own
+-- tooltip) or stacking vertically below each other.
+local function GetReferenceTooltipChainStart()
+	if ShoppingTooltip2 and ShoppingTooltip2:IsShown() then return ShoppingTooltip2 end
+	if ShoppingTooltip1 and ShoppingTooltip1:IsShown() then return ShoppingTooltip1 end
+	return GameTooltip
+end
+
+local function ShowWeaponReferenceTooltip(referenceLink, label)
 	if not referenceLink then return end
 	weaponReferenceTooltipCount = weaponReferenceTooltipCount + 1
 	local tt = weaponReferenceTooltips[weaponReferenceTooltipCount]
@@ -709,13 +720,10 @@ local function ShowWeaponReferenceTooltip(anchorTooltip, referenceLink, label)
 		weaponReferenceTooltips[weaponReferenceTooltipCount] = tt
 	end
 	local prev = weaponReferenceTooltips[weaponReferenceTooltipCount - 1]
-	tt:SetOwner(anchorTooltip, "ANCHOR_NONE")
+	local anchor = prev or GetReferenceTooltipChainStart()
+	tt:SetOwner(GameTooltip, "ANCHOR_NONE")
 	tt:ClearAllPoints()
-	if prev then
-		tt:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -4)
-	else
-		tt:SetPoint("TOPLEFT", anchorTooltip, "BOTTOMLEFT", 0, -4)
-	end
+	tt:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 6, 0)
 	tt:SetHyperlink(referenceLink)
 	tt:AddLine(" ")
 	tt:AddLine("|cff888888GearWeights reference: " .. label .. "|r")
@@ -777,10 +785,16 @@ local function AppendScoreLines(tooltip, itemLink)
 			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
 			AppendComparisonLine(tooltip, "vs Two-Hand: ", score, twoHandScore, mhIgnoreReason)
 			AppendComparisonLine(tooltip, "vs Main Hand + Off Hand combo: ", score, comboScore, mhIgnoreReason)
+			-- Blizzard's native compare tooltip already shows whichever
+			-- loadout is physically equipped right now - only add the OTHER
+			-- one, rather than duplicating what's already on screen.
 			if showReferenceTooltips then
-				ShowWeaponReferenceTooltip(tooltip, twoHandLink, "Two-Hand")
-				ShowWeaponReferenceTooltip(tooltip, mhLink, "Main Hand")
-				ShowWeaponReferenceTooltip(tooltip, ohLink, "Off Hand")
+				if IsMainHandTwoHanded() then
+					ShowWeaponReferenceTooltip(mhLink, "Main Hand")
+					ShowWeaponReferenceTooltip(ohLink, "Off Hand")
+				else
+					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand")
+				end
 			end
 		end
 		tooltip:Show()
@@ -840,9 +854,6 @@ local function AppendScoreLines(tooltip, itemLink)
 			local equippedScore = GW.GetItemScore(equippedLink)
 			if equippedScore then
 				AppendComparisonLine(tooltip, prefix, score, equippedScore, slotIgnoreReason)
-				if showReferenceTooltips then
-					ShowWeaponReferenceTooltip(tooltip, equippedLink, label)
-				end
 			end
 		end
 
@@ -865,9 +876,21 @@ local function AppendScoreLines(tooltip, itemLink)
 			local twoHandLink = GW.GetWeaponBoxLink("twoHand")
 			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
 			AppendComparisonLine(tooltip, "  Combo vs Two-Hand: ", newComboScore, twoHandScore, nil)
-			if showReferenceTooltips and not shownTwoHandReference then
-				shownTwoHandReference = true
-				ShowWeaponReferenceTooltip(tooltip, twoHandLink, "Two-Hand")
+
+			-- Blizzard's native compare tooltip already shows whatever's
+			-- physically equipped for this slot - only add whichever
+			-- reference it doesn't already cover, rather than duplicating it.
+			if showReferenceTooltips then
+				if IsMainHandTwoHanded() then
+					if slotId == INVSLOT_MAINHAND then
+						ShowWeaponReferenceTooltip(ohLink, "Off Hand")
+					else
+						ShowWeaponReferenceTooltip(mhLink, "Main Hand")
+					end
+				elseif not shownTwoHandReference then
+					shownTwoHandReference = true
+					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand")
+				end
 			end
 		end
 	end
