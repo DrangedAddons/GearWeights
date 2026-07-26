@@ -241,7 +241,7 @@ function GW.BuildInstanceLootList(onComplete)
 			local entry = work.entry
 			local itemLink = ResolveItemLink(entry.itemID, diffParam)
 			if itemLink then
-				local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
+				local score, diff, usable, flipsLoadout = GW.GetBestUpgradeDiff(itemLink)
 				if usable == false then
 					table.insert(list, {
 						bossName = work.bossName,
@@ -257,6 +257,7 @@ function GW.BuildInstanceLootList(onComplete)
 						itemLink = itemLink,
 						score = score,
 						diff = diff,
+						flipsLoadout = flipsLoadout,
 						zoneKey = zoneKey,
 						bossIndex = work.bossIndex,
 						stockItemId = entry.itemID,
@@ -399,12 +400,12 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 				end
 			end
 			if itemLink then
-				local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
+				local score, diff, usable, flipsLoadout = GW.GetBestUpgradeDiff(itemLink)
 				if usable ~= false and diff and diff > 0.05 then
 					local result = resultByKey[work.zoneKey]
 					result[work.tier] = result[work.tier] + 1
 					result.total = result.total + 1
-					table.insert(result.items, { itemLink = itemLink, score = score, diff = diff, tier = work.tier, bossName = work.bossName })
+					table.insert(result.items, { itemLink = itemLink, score = score, diff = diff, tier = work.tier, bossName = work.bossName, flipsLoadout = flipsLoadout })
 				end
 			end
 			i = i + 1
@@ -712,6 +713,39 @@ function GW.GetTwoHandComparisonScore()
 	local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
 	local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
 	return math.max(twoHandScore, comboScore)
+end
+
+-- A weapon candidate can be a real upgrade over its own reference box
+-- (Two-Hand, Main Hand, or Off Hand individually) without that being the
+-- whole story - a modest Main Hand upgrade can be exactly what tips your
+-- WHOLE loadout from "2H is better" to "dual-wield is better," which is easy
+-- to miss looking at just that one slot's own diff. replacingBox is which
+-- box this candidate would go into ("twoHand"/"mainHand"/"offHand").
+-- Returns: flips (bool - whether the better loadout changes), newBetter and
+-- oldBetter ("twoHand" or "combo").
+function GW.CheckWeaponLoadoutFlip(replacingBox, candidateScore)
+	local twoHandLink = GW.GetWeaponBoxLink("twoHand")
+	local mhLink = GW.GetWeaponBoxLink("mainHand")
+	local ohLink = GW.GetWeaponBoxLink("offHand")
+	local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
+	local mhScore = mhLink and GW.GetItemScore(mhLink) or 0
+	local ohScore = ohLink and GW.GetItemScore(ohLink) or 0
+	local comboScore = mhScore + ohScore
+
+	local newTwoHandScore, newComboScore = twoHandScore, comboScore
+	if replacingBox == "twoHand" then
+		newTwoHandScore = candidateScore
+	elseif replacingBox == "mainHand" then
+		newComboScore = candidateScore + ohScore
+	elseif replacingBox == "offHand" then
+		newComboScore = mhScore + candidateScore
+	else
+		return false
+	end
+
+	local oldBetter = twoHandScore >= comboScore and "twoHand" or "combo"
+	local newBetter = newTwoHandScore >= newComboScore and "twoHand" or "combo"
+	return oldBetter ~= newBetter, newBetter, oldBetter
 end
 
 -- Below max level, a heirloom is deliberately kept for its scaling stats and

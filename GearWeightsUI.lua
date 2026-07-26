@@ -388,7 +388,8 @@ local function SetLootRowAsItem(row, entry)
 	row.diffText:Show()
 
 	local itemName = GetItemInfo(entry.itemLink)
-	row.itemBtn.text:SetText(itemName or entry.itemLink)
+	local flipMarker = entry.flipsLoadout and "|cffff8800[!]|r " or ""
+	row.itemBtn.text:SetText(flipMarker .. (itemName or entry.itemLink))
 	row.itemLink = entry.itemLink
 	row.entry = entry
 
@@ -698,7 +699,8 @@ end
 
 local function SetDungeonRankRowAsSubItem(row, item)
 	local itemName = GetItemInfo(item.itemLink)
-	row.nameText:SetText("            |cffffffff" .. (itemName or item.itemLink) .. "|r")
+	local flipMarker = item.flipsLoadout and "|cffff8800[!]|r " or ""
+	row.nameText:SetText("            " .. flipMarker .. "|cffffffff" .. (itemName or item.itemLink) .. "|r")
 	if item.isVendorItem then
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r", item.diff))
 		SetDungeonRowPrice(row, item.itemLink, true)
@@ -748,7 +750,8 @@ end
 local function SetDungeonRankRowAsSlotItem(row, item)
 	local itemName = GetItemInfo(item.itemLink)
 	local categoryColor = CATEGORY_COLOR[item.category] or "|cffffffff"
-	row.nameText:SetText("   " .. categoryColor .. (itemName or item.itemLink) .. "|r")
+	local flipMarker = item.flipsLoadout and "|cffff8800[!]|r " or ""
+	row.nameText:SetText("   " .. flipMarker .. categoryColor .. (itemName or item.itemLink) .. "|r")
 	local source = item.bossName and (item.zoneName .. " - " .. item.bossName) or item.zoneName
 	if item.category == "vendor" then
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888%s|r", item.diff, source or "?"))
@@ -824,6 +827,7 @@ RefreshDungeonRankPanel = function()
 					zoneName = result.zoneName,
 					bossName = (result.category ~= "vendor") and entry.bossName or nil,
 					category = result.category,
+					flipsLoadout = entry.flipsLoadout,
 				})
 			end
 		end
@@ -837,6 +841,7 @@ RefreshDungeonRankPanel = function()
 						table.insert(items, {
 							isSlotItem = true, itemLink = entry.itemLink, diff = entry.diff, tier = entry.tier,
 							zoneName = entry.zoneName, bossName = entry.bossName, category = entry.category,
+							flipsLoadout = entry.flipsLoadout,
 						})
 					end
 				end
@@ -864,7 +869,7 @@ RefreshDungeonRankPanel = function()
 						for _, entry in ipairs(r.items) do table.insert(vendorItems, entry) end
 						table.sort(vendorItems, function(a, b) return a.diff > b.diff end)
 						for _, entry in ipairs(vendorItems) do
-							table.insert(items, { isSubItem = true, itemLink = entry.itemLink, diff = entry.diff, tier = entry.tier, isVendorItem = true })
+							table.insert(items, { isSubItem = true, itemLink = entry.itemLink, diff = entry.diff, tier = entry.tier, isVendorItem = true, flipsLoadout = entry.flipsLoadout })
 						end
 					else
 						-- Group the zone's items by boss (preserving first-seen
@@ -884,7 +889,7 @@ RefreshDungeonRankPanel = function()
 							local bossEntries = byBoss[bossName]
 							table.sort(bossEntries, function(a, b) return a.diff > b.diff end)
 							for _, entry in ipairs(bossEntries) do
-								table.insert(items, { isSubItem = true, itemLink = entry.itemLink, diff = entry.diff, tier = entry.tier })
+								table.insert(items, { isSubItem = true, itemLink = entry.itemLink, diff = entry.diff, tier = entry.tier, flipsLoadout = entry.flipsLoadout })
 							end
 						end
 					end

@@ -618,11 +618,22 @@ local function AppendComparisonLine(tooltip, prefix, score, equippedScore, ignor
 	end
 end
 
--- Returns score, bestDiff, usable. bestDiff is nil if the item isn't equippable,
--- or the best-case score difference vs whatever it could replace, otherwise.
--- usable is false if your class can't use this item at all (score/diff also nil
--- in that case). Used by the instance loot list; tooltips use their own more
--- detailed breakdown above.
+local WEAPON_LOADOUT_LABEL = { twoHand = "Two-Hand", combo = "Main Hand + Off Hand" }
+local function AppendLoadoutFlipNote(tooltip, flips, newBetter)
+	if not flips then return end
+	tooltip:AddLine(string.format("  |cffff8800This would make %s your better weapon loadout!|r",
+		WEAPON_LOADOUT_LABEL[newBetter] or newBetter))
+end
+
+-- Returns score, bestDiff, usable, flipsLoadout. bestDiff is nil if the item
+-- isn't equippable, or the best-case score difference vs whatever it could
+-- replace, otherwise. usable is false if your class can't use this item at
+-- all (score/diff also nil in that case). flipsLoadout is true only for a
+-- Main Hand/Off Hand/Two-Hand weapon candidate that would change which of
+-- your two remembered weapon loadouts (2H, or Main Hand + Off Hand combo)
+-- scores higher - see GW.CheckWeaponLoadoutFlip - since that's an important
+-- signal a plain per-slot diff can miss entirely. Used by the instance loot
+-- list; tooltips use their own more detailed breakdown above.
 function GW.GetBestUpgradeDiff(itemLink)
 	local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
 
@@ -637,7 +648,8 @@ function GW.GetBestUpgradeDiff(itemLink)
 
 	if equipLoc == "INVTYPE_2HWEAPON" then
 		if GW.GetSlotIgnoreReason(INVSLOT_MAINHAND) then return score, nil end
-		return score, score - GW.GetTwoHandComparisonScore()
+		local flipsLoadout = GW.CheckWeaponLoadoutFlip("twoHand", score)
+		return score, score - GW.GetTwoHandComparisonScore(), nil, flipsLoadout
 	end
 
 	local slots = slotsForEquipLoc[equipLoc]
@@ -649,7 +661,7 @@ function GW.GetBestUpgradeDiff(itemLink)
 	-- in some other slot would suggest an upgrade you couldn't actually equip.
 	slots = GW.GetUniqueEligibleSlots(itemLink, slots)
 
-	local bestDiff
+	local bestDiff, bestSlotId
 	for _, slotId in ipairs(slots) do
 		if not GW.GetSlotIgnoreReason(slotId) then
 			local equippedLink = GW.GetEquippedLinkForScoring(slotId)
@@ -664,11 +676,19 @@ function GW.GetBestUpgradeDiff(itemLink)
 			end
 			if diff and (not bestDiff or diff > bestDiff) then
 				bestDiff = diff
+				bestSlotId = slotId
 			end
 		end
 	end
 
-	return score, bestDiff
+	local flipsLoadout
+	if bestSlotId == INVSLOT_MAINHAND then
+		flipsLoadout = GW.CheckWeaponLoadoutFlip("mainHand", score)
+	elseif bestSlotId == INVSLOT_OFFHAND then
+		flipsLoadout = GW.CheckWeaponLoadoutFlip("offHand", score)
+	end
+
+	return score, bestDiff, nil, flipsLoadout
 end
 
 local function AppendScoreLines(tooltip, itemLink)
@@ -716,6 +736,8 @@ local function AppendScoreLines(tooltip, itemLink)
 			else
 				AppendComparisonLine(tooltip, "Two-Hand reference: ", score, twoHandScore, mhIgnoreReason)
 			end
+			local flips, newBetter = GW.CheckWeaponLoadoutFlip("twoHand", score)
+			AppendLoadoutFlipNote(tooltip, flips, newBetter)
 		end
 		tooltip:Show()
 		return
@@ -774,6 +796,12 @@ local function AppendScoreLines(tooltip, itemLink)
 			if equippedScore then
 				AppendComparisonLine(tooltip, prefix, score, equippedScore, slotIgnoreReason)
 			end
+		end
+
+		if slotId == INVSLOT_MAINHAND or slotId == INVSLOT_OFFHAND then
+			local replacingBox = slotId == INVSLOT_MAINHAND and "mainHand" or "offHand"
+			local flips, newBetter = GW.CheckWeaponLoadoutFlip(replacingBox, score)
+			AppendLoadoutFlipNote(tooltip, flips, newBetter)
 		end
 
 		-- Weapons are a two-piece system: also show what the Main Hand + Off Hand
