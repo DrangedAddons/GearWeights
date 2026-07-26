@@ -368,12 +368,36 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 
 	local total = #workQueue
 	local i = 1
+	-- Not every loot table actually has distinct items per difficulty - trash
+	-- mob drops in particular are sometimes the exact same item at Normal,
+	-- Heroic, and Mythic on this server, unlike boss loot which does scale.
+	-- GetItemDifficultyID() can't distinguish "no such tier exists" from
+	-- "happens to be the same item" (it falls back to returning the input ID
+	-- unchanged either way), so instead: since tiers are always enqueued
+	-- low-to-high (normal, then heroic, then mythic - see `tiers` above), once
+	-- a boss's item resolves to some link, remember it per boss and skip any
+	-- later tier that resolves to that exact same link. That's not a genuine
+	-- separate upgrade opportunity, just the same item shown again.
+	local seenItemsByZone = {}
 	local worker = CreateFrame("Frame")
 	worker:SetScript("OnUpdate", function(self)
 		local processed = 0
 		while i <= total and processed < RANKING_BATCH_SIZE do
 			local work = workQueue[i]
 			local itemLink = ResolveItemLink(work.stockItemId, TIER_PARAM[work.tier])
+			if itemLink then
+				local zoneSeen = seenItemsByZone[work.zoneKey]
+				if not zoneSeen then
+					zoneSeen = {}
+					seenItemsByZone[work.zoneKey] = zoneSeen
+				end
+				local seenKey = work.bossName .. "|" .. itemLink
+				if zoneSeen[seenKey] then
+					itemLink = nil
+				else
+					zoneSeen[seenKey] = true
+				end
+			end
 			if itemLink then
 				local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
 				if usable ~= false and diff and diff > 0.05 then
