@@ -1,0 +1,51 @@
+name: Release Zip
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'GearWeights.toc'
+      - '*.lua'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from .toc
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^## Version:' GearWeights.toc | sed 's/## Version: *//' | tr -d '\r')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version was already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build addon zip
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          mkdir -p build/GearWeights
+          find . -mindepth 1 -maxdepth 1 \
+            ! -name build ! -name .git ! -name .github \
+            -exec cp -r {} build/GearWeights/ \;
+          cd build && zip -r "../GearWeights-${{ steps.version.outputs.version }}.zip" GearWeights
+
+      - name: Create release
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: GearWeights ${{ steps.version.outputs.version }}
+          files: GearWeights-${{ steps.version.outputs.version }}.zip
