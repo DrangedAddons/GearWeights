@@ -768,6 +768,8 @@ GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
 local function AppendScoreLines(tooltip, itemLink)
 	if not itemLink then return end
 
+	local isNativeCompareTooltip = tooltip == ShoppingTooltip1 or tooltip == ShoppingTooltip2
+
 	-- Only the primary hover tooltip, and only while shift is held (matching
 	-- the native compare gesture), ever shows the supplementary reference
 	-- tooltips - reset on every call so a previous item's leftovers don't
@@ -811,6 +813,22 @@ local function AppendScoreLines(tooltip, itemLink)
 		-- currently in the Two-Hand box) is meaningless and skipped, but the
 		-- combo comparison below is still real, useful information even then.
 		local isOwnTwoHandReference = twoHandLink == itemLink
+		-- Blizzard's native "Currently Equipped" tooltip runs this same 2H
+		-- branch independently whenever the tracked Two-Hand item happens to
+		-- be equipped, showing self-referential combo math ("Combo vs
+		-- Two-Hand: Downgrade"). When that's ALSO true while shift is held,
+		-- our own reference chain (elsewhere, triggered by whatever candidate
+		-- is actually being hovered) shows this exact item again with
+		-- candidate-relative framing instead - two tooltips for one weapon,
+		-- with differently-signed lines, reads as a bug even though both
+		-- numbers are individually correct. Skip the native tooltip's lines
+		-- in that case. This is a plain comparison against already-persisted
+		-- box state, not data written by a sibling hook mid-frame, so it
+		-- carries none of the previous race condition's risk.
+		if isOwnTwoHandReference and isNativeCompareTooltip and IsShiftKeyDown() then
+			tooltip:Show()
+			return
+		end
 		if not twoHandLink and not mhLink and not ohLink then
 			tooltip:AddLine(mhIgnoreReason and ("|cff888888Upgrade (weapon slots empty) (" .. mhIgnoreReason .. ")|r") or "|cff00ff00Upgrade (weapon slots empty)|r")
 		else
@@ -846,8 +864,6 @@ local function AppendScoreLines(tooltip, itemLink)
 			-- so deferring to Blizzard's native "currently equipped" tooltip
 			-- would hide exactly the reference you locked it for. Fixed
 			-- order (Main-Hand, then Off-Hand, then Two-Hand) every time.
-			-- ShowWeaponReferenceTooltip itself skips one that would just
-			-- duplicate whatever Blizzard's own compare tooltip already shows.
 			if showReferenceTooltips then
 				local comboInfo = { info = string.format("Main-Hand + Off-Hand Combo: %.1f", comboScore) }
 				local comboComparison = { score = comboScore, vsScore = score,
