@@ -795,3 +795,72 @@ end)
 function GW.NotifyWeightsChanged()
 	ScheduleDungeonRankRescan()
 end
+
+--------------------------------------------------------------------------------
+-- Vendor prices - AtlasLoot's bundled data has no price info at all (its
+-- vendor entries are bare {itemID=N}), so the only way to know what
+-- something costs is to actually see it on a real merchant window. Captured
+-- once per item and cached in SavedVariables (persists across sessions,
+-- silently refreshed every time you revisit that vendor - a merchant window
+-- only ever has a handful of items, so this is negligible cost even on
+-- every visit). Items never actually seen for sale just show as unknown.
+--------------------------------------------------------------------------------
+
+local function EnsureVendorPriceCache()
+	GearWeightsDB = GearWeightsDB or {}
+	GearWeightsDB.vendorPrices = GearWeightsDB.vendorPrices or {}
+end
+
+-- Returns { copper = N, costs = { { amount, link, currencyName }, ... } } or
+-- nil if this item has never been seen for sale on a visited merchant.
+function GW.GetVendorPriceInfo(itemLink)
+	if not itemLink then return nil end
+	EnsureVendorPriceCache()
+	local itemId = tonumber(itemLink:match("item:(%d+)"))
+	if not itemId then return nil end
+	return GearWeightsDB.vendorPrices[itemId]
+end
+
+function GW.FormatVendorPrice(itemLink)
+	local info = GW.GetVendorPriceInfo(itemLink)
+	if not info then return "|cff888888price unknown - visit vendor|r" end
+
+	local parts = {}
+	if info.copper and info.copper > 0 then
+		table.insert(parts, GetCoinTextureString(info.copper))
+	end
+	if info.costs then
+		for _, cost in ipairs(info.costs) do
+			local name = (cost.link and GetItemInfo(cost.link)) or cost.currencyName or "?"
+			table.insert(parts, string.format("%d %s", cost.amount, name))
+		end
+	end
+	if #parts == 0 then return "|cff00ff00Free|r" end
+	return table.concat(parts, ", ")
+end
+
+local function ScanOpenMerchant()
+	EnsureVendorPriceCache()
+	local n = GetMerchantNumItems()
+	for i = 1, n do
+		local link = GetMerchantItemLink(i)
+		local itemId = link and tonumber(link:match("item:(%d+)"))
+		if itemId then
+			local _, _, price, _, _, _, extendedCost = GetMerchantItemInfo(i)
+			local costs
+			if extendedCost then
+				costs = {}
+				local costKinds = GetMerchantItemCostInfo(i)
+				for j = 1, (costKinds or 0) do
+					local costTexture, costAmount, costLink, currencyName = GetMerchantItemCostItem(i, j)
+					table.insert(costs, { amount = costAmount, link = costLink, currencyName = currencyName })
+				end
+			end
+			GearWeightsDB.vendorPrices[itemId] = { copper = price, costs = costs }
+		end
+	end
+end
+
+local merchantWatchFrame = CreateFrame("Frame")
+merchantWatchFrame:RegisterEvent("MERCHANT_SHOW")
+merchantWatchFrame:SetScript("OnEvent", ScanOpenMerchant)

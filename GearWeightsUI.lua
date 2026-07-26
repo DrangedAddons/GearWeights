@@ -586,8 +586,13 @@ end
 local function SetDungeonRankRowAsSubItem(row, item)
 	local itemName = GetItemInfo(item.itemLink)
 	row.nameText:SetText("            |cffffffff" .. (itemName or item.itemLink) .. "|r")
-	row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888(%s)|r",
-		item.diff, TIER_LABEL[item.tier] or item.tier))
+	if item.isVendorItem then
+		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  %s",
+			item.diff, GW.FormatVendorPrice(item.itemLink)))
+	else
+		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888(%s)|r",
+			item.diff, TIER_LABEL[item.tier] or item.tier))
+	end
 
 	row:EnableMouse(true)
 	row:SetScript("OnClick", function()
@@ -626,8 +631,13 @@ local function SetDungeonRankRowAsSlotItem(row, item)
 	local categoryColor = CATEGORY_COLOR[item.category] or "|cffffffff"
 	row.nameText:SetText("   " .. categoryColor .. (itemName or item.itemLink) .. "|r")
 	local source = item.bossName and (item.zoneName .. " - " .. item.bossName) or item.zoneName
-	row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888%s (%s)|r",
-		item.diff, source or "?", TIER_LABEL[item.tier] or item.tier))
+	if item.category == "vendor" then
+		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888%s|r  %s",
+			item.diff, source or "?", GW.FormatVendorPrice(item.itemLink)))
+	else
+		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888%s (%s)|r",
+			item.diff, source or "?", TIER_LABEL[item.tier] or item.tier))
+	end
 
 	row:EnableMouse(true)
 	row:SetScript("OnClick", function()
@@ -731,7 +741,7 @@ RefreshDungeonRankPanel = function()
 						for _, entry in ipairs(r.items) do table.insert(vendorItems, entry) end
 						table.sort(vendorItems, function(a, b) return a.diff > b.diff end)
 						for _, entry in ipairs(vendorItems) do
-							table.insert(items, { isSubItem = true, itemLink = entry.itemLink, diff = entry.diff, tier = entry.tier })
+							table.insert(items, { isSubItem = true, itemLink = entry.itemLink, diff = entry.diff, tier = entry.tier, isVendorItem = true })
 						end
 					else
 						-- Group the zone's items by boss (preserving first-seen
