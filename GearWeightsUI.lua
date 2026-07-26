@@ -558,6 +558,14 @@ end
 -- Mark of Triumph tracker for that currency specifically - rather than plain
 -- text, since neither is otherwise interactive or visually distinct at a glance.
 local function SetDungeonRowPrice(row, itemLink)
+	-- countsText's box can be much wider than its actual text (the shared
+	-- column layout pass stretches it to match the widest row in the current
+	-- view), so anchor to the real rendered text width instead of the box's
+	-- right edge - otherwise the icon ends up positioned past where the
+	-- visible text actually ends, often off the row entirely.
+	row.priceIcon:ClearAllPoints()
+	row.priceIcon:SetPoint("LEFT", row.countsText, "LEFT", row.countsText:GetStringWidth() + 6, 0)
+
 	local parts, status = GW.GetVendorPriceParts(itemLink)
 	if not parts then
 		row.priceIcon:Hide()
