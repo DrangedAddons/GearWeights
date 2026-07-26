@@ -683,8 +683,58 @@ function GW.GetBestUpgradeDiff(itemLink)
 	return score, bestDiff, nil, flipsLoadout
 end
 
+-- Blizzard's native shift-compare (ShoppingTooltip1/2) always shows whatever
+-- is physically equipped right now, which is the wrong reference the moment
+-- you're wearing a 2H and considering a 1H item (or vice versa), or have a
+-- box locked to something you're not currently wearing at all (a quest
+-- weapon, say). These are a second, independent set of tooltips - not a
+-- hijack of Blizzard's own - that show the actual tracked reference item(s)
+-- instead, only while shift is held (matching the native compare gesture)
+-- and only for the primary hover tooltip (not ItemRefTooltip or the
+-- ShoppingTooltips themselves, to avoid stacking compare-tooltips-on-compare-tooltips).
+local weaponReferenceTooltips = {}
+local weaponReferenceTooltipCount = 0
+
+local function ResetWeaponReferenceTooltips()
+	for _, tt in ipairs(weaponReferenceTooltips) do tt:Hide() end
+	weaponReferenceTooltipCount = 0
+end
+
+local function ShowWeaponReferenceTooltip(anchorTooltip, referenceLink, label)
+	if not referenceLink then return end
+	weaponReferenceTooltipCount = weaponReferenceTooltipCount + 1
+	local tt = weaponReferenceTooltips[weaponReferenceTooltipCount]
+	if not tt then
+		tt = CreateFrame("GameTooltip", "GearWeightsReferenceTooltip" .. weaponReferenceTooltipCount, nil, "GameTooltipTemplate")
+		weaponReferenceTooltips[weaponReferenceTooltipCount] = tt
+	end
+	local prev = weaponReferenceTooltips[weaponReferenceTooltipCount - 1]
+	tt:SetOwner(anchorTooltip, "ANCHOR_NONE")
+	tt:ClearAllPoints()
+	if prev then
+		tt:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -4)
+	else
+		tt:SetPoint("TOPLEFT", anchorTooltip, "BOTTOMLEFT", 0, -4)
+	end
+	tt:SetHyperlink(referenceLink)
+	tt:AddLine(" ")
+	tt:AddLine("|cff888888GearWeights reference: " .. label .. "|r")
+	tt:Show()
+end
+
+GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
+
 local function AppendScoreLines(tooltip, itemLink)
 	if not itemLink then return end
+
+	-- Only the primary hover tooltip, and only while shift is held (matching
+	-- the native compare gesture), ever shows the supplementary reference
+	-- tooltips - reset on every call so a previous item's leftovers don't
+	-- linger once you move to a new item or let go of shift.
+	local showReferenceTooltips = tooltip == GameTooltip and IsShiftKeyDown() and true or false
+	if tooltip == GameTooltip then
+		ResetWeaponReferenceTooltips()
+	end
 
 	if not GW.IsItemUsable(itemLink) then
 		tooltip:AddLine(" ")
@@ -727,6 +777,11 @@ local function AppendScoreLines(tooltip, itemLink)
 			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
 			AppendComparisonLine(tooltip, "vs Two-Hand: ", score, twoHandScore, mhIgnoreReason)
 			AppendComparisonLine(tooltip, "vs Main Hand + Off Hand combo: ", score, comboScore, mhIgnoreReason)
+			if showReferenceTooltips then
+				ShowWeaponReferenceTooltip(tooltip, twoHandLink, "Two-Hand")
+				ShowWeaponReferenceTooltip(tooltip, mhLink, "Main Hand")
+				ShowWeaponReferenceTooltip(tooltip, ohLink, "Off Hand")
+			end
 		end
 		tooltip:Show()
 		return
@@ -759,6 +814,7 @@ local function AppendScoreLines(tooltip, itemLink)
 	local uniqueEligible = {}
 	for _, s in ipairs(eligibleSlots) do uniqueEligible[s] = true end
 
+	local shownTwoHandReference = false
 	for _, slotId in ipairs(slots) do
 		local equippedLink = GW.GetEquippedLinkForScoring(slotId)
 		local label = slotLabels[slotId]
@@ -784,6 +840,9 @@ local function AppendScoreLines(tooltip, itemLink)
 			local equippedScore = GW.GetItemScore(equippedLink)
 			if equippedScore then
 				AppendComparisonLine(tooltip, prefix, score, equippedScore, slotIgnoreReason)
+				if showReferenceTooltips then
+					ShowWeaponReferenceTooltip(tooltip, equippedLink, label)
+				end
 			end
 		end
 
@@ -806,6 +865,10 @@ local function AppendScoreLines(tooltip, itemLink)
 			local twoHandLink = GW.GetWeaponBoxLink("twoHand")
 			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
 			AppendComparisonLine(tooltip, "  Combo vs Two-Hand: ", newComboScore, twoHandScore, nil)
+			if showReferenceTooltips and not shownTwoHandReference then
+				shownTwoHandReference = true
+				ShowWeaponReferenceTooltip(tooltip, twoHandLink, "Two-Hand")
+			end
 		end
 	end
 
