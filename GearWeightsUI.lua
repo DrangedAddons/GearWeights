@@ -527,7 +527,95 @@ local function CreateDungeonRankRow(index)
 	countsText:SetWordWrap(false)
 	row.countsText = countsText
 
+	-- Only shown/positioned for vendor rows - a real icon + its own hover
+	-- hitbox (separate from the row's own item-tooltip hover), so a vendor
+	-- price can show the exact same icon and tooltip as the bottom-bar
+	-- currency tracker instead of plain text.
+	local priceIcon = row:CreateTexture(nil, "ARTWORK")
+	priceIcon:SetSize(14, 14)
+	priceIcon:SetPoint("LEFT", countsText, "RIGHT", 6, 0)
+	priceIcon:Hide()
+	row.priceIcon = priceIcon
+
+	local priceText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	priceText:SetJustifyH("LEFT")
+	priceText:SetWordWrap(false)
+	priceText:SetPoint("LEFT", priceIcon, "RIGHT", 4, 0)
+	row.priceText = priceText
+
+	local priceHitbox = CreateFrame("Frame", nil, row)
+	priceHitbox:SetPoint("TOPLEFT", priceIcon, "TOPLEFT", 0, 0)
+	priceHitbox:SetPoint("BOTTOMRIGHT", priceText, "BOTTOMRIGHT", 0, 0)
+	priceHitbox:EnableMouse(true)
+	priceHitbox:Hide()
+	row.priceHitbox = priceHitbox
+
 	return row
+end
+
+-- Renders a vendor item's cost after the diff (countsText) using a real icon
+-- + hover tooltip where possible - the same icon/tooltip as the bottom-bar
+-- Mark of Triumph tracker for that currency specifically - rather than plain
+-- text, since neither is otherwise interactive or visually distinct at a glance.
+local function SetDungeonRowPrice(row, itemLink)
+	local parts, status = GW.GetVendorPriceParts(itemLink)
+	if not parts then
+		row.priceIcon:Hide()
+		row.priceHitbox:Hide()
+		if status == "special" then
+			row.priceText:SetText("|cff888888costs a special currency (amount not shown)|r")
+		elseif status == "free" then
+			row.priceText:SetText("|cff00ff00Free|r")
+		else
+			row.priceText:SetText("|cff888888price unknown - visit vendor|r")
+		end
+		return
+	end
+
+	local primary = parts[1]
+	local extra = {}
+	for i = 2, #parts do
+		local p = parts[i]
+		if p.kind == "copper" then
+			table.insert(extra, GetCoinTextureString(p.amount))
+		else
+			local name = p.itemLink and GetItemInfo(p.itemLink) or p.name or "?"
+			table.insert(extra, string.format("%d %s", p.amount, name))
+		end
+	end
+	local extraText = #extra > 0 and ("  " .. table.concat(extra, ", ")) or ""
+
+	if primary.kind == "markOfTriumph" then
+		local _, icon = GW.GetMarkOfTriumphInfo()
+		row.priceIcon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+		row.priceIcon:Show()
+		row.priceText:SetText(tostring(primary.amount) .. extraText)
+		row.priceHitbox:Show()
+		row.priceHitbox:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GW.ShowMarkOfTriumphTooltip()
+			GameTooltip:Show()
+		end)
+		row.priceHitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	elseif primary.kind == "item" and primary.itemLink then
+		local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(primary.itemLink)
+		row.priceIcon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+		row.priceIcon:Show()
+		row.priceText:SetText(tostring(primary.amount) .. extraText)
+		row.priceHitbox:Show()
+		row.priceHitbox:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetHyperlink(primary.itemLink)
+			GameTooltip:Show()
+		end)
+		row.priceHitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	else
+		row.priceIcon:Hide()
+		row.priceHitbox:Hide()
+		local primaryText = primary.kind == "copper" and GetCoinTextureString(primary.amount)
+			or string.format("%d %s", primary.amount, primary.name or "?")
+		row.priceText:SetText(primaryText .. extraText)
+	end
 end
 
 local CATEGORY_LABEL = { dungeon = "Dungeons", raid = "Raids", vendor = "Vendors" }
@@ -540,6 +628,8 @@ local function SetDungeonRankRowAsHeader(row, category, count, itemTotal)
 		count, count == 1 and "location" or "locations",
 		itemTotal, itemTotal == 1 and "item" or "items"))
 	row.countsText:SetText("")
+	row.priceIcon:Hide()
+	row.priceHitbox:Hide()
 	row:EnableMouse(true)
 	row:SetScript("OnEnter", nil)
 	row:SetScript("OnLeave", nil)
@@ -561,6 +651,8 @@ local function SetDungeonRankRowAsItem(row, result)
 	if GW.IsDungeonRankTierEnabled("heroic") then table.insert(parts, "H:" .. result.heroic) end
 	if GW.IsDungeonRankTierEnabled("mythic") then table.insert(parts, "M:" .. result.mythic) end
 	row.countsText:SetText(table.concat(parts, "  ") .. string.format("  |cffffff00(%d total)|r", result.total))
+	row.priceIcon:Hide()
+	row.priceHitbox:Hide()
 
 	row:EnableMouse(true)
 	row:SetScript("OnEnter", nil)
@@ -577,6 +669,8 @@ local function SetDungeonRankRowAsBossHeader(row, bossName)
 	SetDungeonRowFullWidthName(row)
 	row.nameText:SetText("      |cffffd200" .. (bossName or "Unknown") .. "|r")
 	row.countsText:SetText("")
+	row.priceIcon:Hide()
+	row.priceHitbox:Hide()
 	row:EnableMouse(false)
 	row:SetScript("OnClick", nil)
 	row:SetScript("OnEnter", nil)
@@ -587,11 +681,13 @@ local function SetDungeonRankRowAsSubItem(row, item)
 	local itemName = GetItemInfo(item.itemLink)
 	row.nameText:SetText("            |cffffffff" .. (itemName or item.itemLink) .. "|r")
 	if item.isVendorItem then
-		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  %s",
-			item.diff, GW.FormatVendorPrice(item.itemLink)))
+		row.countsText:SetText(string.format("|cff00ff00+%.1f|r", item.diff))
+		SetDungeonRowPrice(row, item.itemLink)
 	else
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888(%s)|r",
 			item.diff, TIER_LABEL[item.tier] or item.tier))
+		row.priceIcon:Hide()
+		row.priceHitbox:Hide()
 	end
 
 	row:EnableMouse(true)
@@ -615,6 +711,8 @@ local function SetDungeonRankRowAsSlotHeader(row, category, count)
 	SetDungeonRowFullWidthName(row)
 	row.nameText:SetText(string.format("|cffffff00[%s] %s (%d)|r", arrow, category, count))
 	row.countsText:SetText("")
+	row.priceIcon:Hide()
+	row.priceHitbox:Hide()
 	row:EnableMouse(true)
 	row:SetScript("OnEnter", nil)
 	row:SetScript("OnLeave", nil)
@@ -632,11 +730,13 @@ local function SetDungeonRankRowAsSlotItem(row, item)
 	row.nameText:SetText("   " .. categoryColor .. (itemName or item.itemLink) .. "|r")
 	local source = item.bossName and (item.zoneName .. " - " .. item.bossName) or item.zoneName
 	if item.category == "vendor" then
-		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888%s|r  %s",
-			item.diff, source or "?", GW.FormatVendorPrice(item.itemLink)))
+		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888%s|r", item.diff, source or "?"))
+		SetDungeonRowPrice(row, item.itemLink)
 	else
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888%s (%s)|r",
 			item.diff, source or "?", TIER_LABEL[item.tier] or item.tier))
+		row.priceIcon:Hide()
+		row.priceHitbox:Hide()
 	end
 
 	row:EnableMouse(true)
@@ -1444,8 +1544,10 @@ local function FindCurrencyInfo(name)
 	return nil
 end
 
--- Returns count, icon, currencyIndex (currencyIndex is nil in the bag-item fallback case).
-local function GetMarkOfTriumphInfo()
+-- Returns count, icon, currencyIndex (currencyIndex is nil in the bag-item
+-- fallback case). Exposed on GW so vendor price rows elsewhere in this file
+-- can show the exact same icon and tooltip as the bottom-bar tracker.
+function GW.GetMarkOfTriumphInfo()
 	local count, icon, currencyIndex = FindCurrencyInfo("Mark of Triumph")
 	if count then return count, icon, currencyIndex end
 	if GetItemCount then
@@ -1456,6 +1558,22 @@ local function GetMarkOfTriumphInfo()
 		end
 	end
 	return 0, nil, nil
+end
+
+-- Shared by the bottom-bar tracker and any vendor price row showing a Mark of
+-- Triumph cost - assumes GameTooltip:SetOwner() was already called.
+function GW.ShowMarkOfTriumphTooltip()
+	local _, _, currencyIndex = GW.GetMarkOfTriumphInfo()
+	if currencyIndex then
+		GameTooltip:SetCurrencyToken(currencyIndex)
+	else
+		local _, itemLink = GetItemInfo("Mark of Triumph")
+		if itemLink then
+			GameTooltip:SetHyperlink(itemLink)
+		else
+			GameTooltip:AddLine("Mark of Triumph")
+		end
+	end
 end
 
 local MIN_FRAME_WIDTH, MIN_FRAME_HEIGHT = 460, 300
@@ -1522,17 +1640,7 @@ local function CreateMainFrame()
 	currencyHitbox:EnableMouse(true)
 	currencyHitbox:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		local _, _, currencyIndex = GetMarkOfTriumphInfo()
-		if currencyIndex then
-			GameTooltip:SetCurrencyToken(currencyIndex)
-		else
-			local _, itemLink = GetItemInfo("Mark of Triumph")
-			if itemLink then
-				GameTooltip:SetHyperlink(itemLink)
-			else
-				GameTooltip:AddLine("Mark of Triumph")
-			end
-		end
+		GW.ShowMarkOfTriumphTooltip()
 		GameTooltip:Show()
 	end)
 	currencyHitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1545,7 +1653,7 @@ local function CreateMainFrame()
 	clickHint:SetText("Alt+Click item: add to WishList  |  Ctrl+Click item: lock/unlock slot")
 
 	local function RefreshCurrencyText()
-		local count, icon = GetMarkOfTriumphInfo()
+		local count, icon = GW.GetMarkOfTriumphInfo()
 		currencyIcon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
 		currencyText:SetText(tostring(count))
 	end

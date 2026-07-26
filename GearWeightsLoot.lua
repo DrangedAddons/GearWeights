@@ -867,39 +867,53 @@ local KNOWN_VENDOR_PRICES = {
 	["Lunar Splinter"] = { amount = 70, currencyName = "Mark of Triumph" },
 }
 
-function GW.FormatVendorPrice(itemLink)
+-- Returns an array of cost "parts" for the UI to render with real icons and
+-- hover tooltips, plus a status string ("unknown"/"special"/"free") when
+-- there's nothing to show. Each part is one of:
+--   { kind = "copper", amount = N }
+--   { kind = "markOfTriumph", amount = N } - render with GW.GetMarkOfTriumphInfo()'s
+--     icon and GW.ShowMarkOfTriumphTooltip(), same as the bottom-bar tracker
+--   { kind = "item", amount = N, itemLink = link } - a real item-based cost
+--   { kind = "item", amount = N, name = "..." } - a named cost with no icon available
+function GW.GetVendorPriceParts(itemLink)
 	local info = GW.GetVendorPriceInfo(itemLink)
 
 	local parts = {}
 	if info then
 		if info.copper and info.copper > 0 then
-			table.insert(parts, GetCoinTextureString(info.copper))
+			table.insert(parts, { kind = "copper", amount = info.copper })
 		end
 		if info.costs then
 			for _, cost in ipairs(info.costs) do
-				local name = (cost.link and GetItemInfo(cost.link)) or cost.currencyName or "?"
-				table.insert(parts, string.format("%d %s", cost.amount, name))
+				if cost.currencyName == "Mark of Triumph" then
+					table.insert(parts, { kind = "markOfTriumph", amount = cost.amount })
+				elseif cost.link then
+					table.insert(parts, { kind = "item", amount = cost.amount, itemLink = cost.link })
+				else
+					table.insert(parts, { kind = "item", amount = cost.amount, name = cost.currencyName or "?" })
+				end
 			end
 		end
 	end
-	if #parts > 0 then return table.concat(parts, ", ") end
+	if #parts > 0 then return parts end
 
 	local itemName = GetItemInfo(itemLink)
 	local known = itemName and KNOWN_VENDOR_PRICES[itemName]
 	if known then
-		return string.format("%d %s", known.amount, known.currencyName)
+		if known.currencyName == "Mark of Triumph" then
+			return { { kind = "markOfTriumph", amount = known.amount } }
+		end
+		return { { kind = "item", amount = known.amount, name = known.currencyName } }
 	end
 
-	if not info then return "|cff888888price unknown - visit vendor|r" end
+	if not info then return nil, "unknown" end
 
 	-- Some custom-currency vendors (confirmed on this server) flag
 	-- extendedCost true but expose zero cost details through either the
 	-- structured API or the tooltip text - there's no way for an addon to
 	-- learn the real price here, so say so plainly instead of calling it Free.
-	if info.extendedCost then
-		return "|cff888888costs a special currency (amount not exposed by the game client)|r"
-	end
-	return "|cff00ff00Free|r"
+	if info.extendedCost then return nil, "special" end
+	return nil, "free"
 end
 
 local function ScanOpenMerchant()
