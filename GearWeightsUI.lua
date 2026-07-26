@@ -721,8 +721,14 @@ RefreshDungeonRankPanel = function()
 					if r.category == "vendor" then
 						-- AtlasLoot models a vendor's stock as "boss" pages (Page 1,
 						-- Page 2...), but that's just pagination of the same shop,
-						-- not a meaningful grouping - list every item flat instead.
-						for _, entry in ipairs(r.items) do
+						-- not a meaningful grouping - list every item flat instead,
+						-- highest upgrade first. Sort a copy rather than r.items
+						-- itself, since that's the shared cached scan data reused
+						-- by other view modes (e.g. View by Slot).
+						local vendorItems = {}
+						for _, entry in ipairs(r.items) do table.insert(vendorItems, entry) end
+						table.sort(vendorItems, function(a, b) return a.diff > b.diff end)
+						for _, entry in ipairs(vendorItems) do
 							table.insert(items, { isSubItem = true, itemLink = entry.itemLink, diff = entry.diff, tier = entry.tier })
 						end
 					else
