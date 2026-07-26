@@ -778,6 +778,21 @@ GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
 local function AppendScoreLines(tooltip, itemLink)
 	if not itemLink then return end
 
+	-- Blizzard's native "Currently Equipped" compare tooltip (ShoppingTooltip1/2)
+	-- is a fully separate, independently-refreshing tooltip from GameTooltip -
+	-- it has no way to know what candidate item you're actually hovering, so
+	-- whenever it's showing your tracked Two-Hand weapon it can only ever
+	-- report your PLAIN Main-Hand + Off-Hand combo (ignoring any Main-Hand/
+	-- Off-Hand candidate you're currently considering). That's used below to
+	-- suppress that plain combo line specifically there, since the candidate's
+	-- own tooltip (GameTooltip) always already shows the up-to-date combo
+	-- number right next to it. Bridging the actual candidate score across to
+	-- this tooltip instead was tried before and caused a real race condition
+	-- (GameTooltip and ShoppingTooltip1/2 refresh independently on modifier-key
+	-- changes, with no guaranteed relative order) - this flag only reads which
+	-- tooltip object is being populated, not data written by another hook.
+	local isNativeCompareTooltip = tooltip == ShoppingTooltip1 or tooltip == ShoppingTooltip2
+
 	-- Only the primary hover tooltip, and only while shift is held (matching
 	-- the native compare gesture), ever shows the supplementary reference
 	-- tooltips - reset on every call so a previous item's leftovers don't
@@ -830,26 +845,32 @@ local function AppendScoreLines(tooltip, itemLink)
 			-- whatever Main-Hand/Off-Hand item you might ALSO be evaluating
 			-- right now (a version of this once did, via state shared across
 			-- tooltip hooks - but those fire at an uncertain relative time,
-			-- so the same item's combo value would flip unpredictably. Our
-			-- own Two-Hand reference tooltip below is the reliable, always-
-			-- correct place to see the combo-including-your-other-candidate
-			-- math - it's computed directly, not through shared state.
+			-- so the same item's combo value would flip unpredictably.
 			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
 			if not isOwnTwoHandReference then
 				AppendComparisonLine(tooltip, string.format("vs Two-Hand %.1f: ", twoHandScore), score, twoHandScore, mhIgnoreReason)
 			end
-			-- A 2H candidate doesn't change your Main-Hand + Off-Hand combo at
-			-- all (unlike a Main-Hand/Off-Hand candidate, where the combo line
-			-- above it already establishes what "combo" means numerically
-			-- here) - so state the existing combo's value plainly first,
-			-- otherwise "Combo vs Two-Hand" below has no established referent
-			-- and reads ambiguously about which number is which.
-			tooltip:AddLine(string.format("Main-Hand + Off-Hand Combo: %.1f", comboScore), 0.7, 0.7, 0.7)
-			-- Framed with Combo as the subject ("Combo vs Two-Hand: Upgrade/
-			-- Downgrade"), same as every other combo comparison in this
-			-- feature, rather than "vs combo: Upgrade" from the 2H's own
-			-- perspective - one consistent sentence shape everywhere.
-			AppendComparisonLine(tooltip, string.format("Combo vs Two-Hand %.1f: ", score), comboScore, score, mhIgnoreReason)
+			-- Skip the plain combo lines specifically on Blizzard's native
+			-- tooltip when it's showing your tracked Two-Hand weapon itself -
+			-- that plain (non-candidate) number sits right next to whatever
+			-- candidate's own tooltip already shows the up-to-date combo
+			-- including that candidate, and having both visible at once reads
+			-- as if they disagree rather than as two different questions.
+			if not (isOwnTwoHandReference and isNativeCompareTooltip) then
+				-- A 2H candidate doesn't change your Main-Hand + Off-Hand combo
+				-- at all (unlike a Main-Hand/Off-Hand candidate, where the combo
+				-- line above it already establishes what "combo" means
+				-- numerically here) - so state the existing combo's value
+				-- plainly first, otherwise "Combo vs Two-Hand" below has no
+				-- established referent and reads ambiguously about which
+				-- number is which.
+				tooltip:AddLine(string.format("Main-Hand + Off-Hand Combo: %.1f", comboScore), 0.7, 0.7, 0.7)
+				-- Framed with Combo as the subject ("Combo vs Two-Hand: Upgrade/
+				-- Downgrade"), same as every other combo comparison in this
+				-- feature, rather than "vs combo: Upgrade" from the 2H's own
+				-- perspective - one consistent sentence shape everywhere.
+				AppendComparisonLine(tooltip, string.format("Combo vs Two-Hand %.1f: ", score), comboScore, score, mhIgnoreReason)
+			end
 			-- Always show all three tracked references, regardless of which
 			-- one happens to be physically equipped right now - a locked box
 			-- is deliberately showing something you're NOT currently wearing,
@@ -959,13 +980,23 @@ local function AppendScoreLines(tooltip, itemLink)
 			end
 			local twoHandLink = GW.GetWeaponBoxLink("twoHand")
 			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
-			-- The new combo total is shown explicitly (not just its diff),
-			-- so it's never ambiguous whether an embedded number belongs to
-			-- the combo or to Two-Hand - "Combo Main-Hand + Off-Hand 81.4:"
-			-- names its own value before "Combo vs Two-Hand 86.3:" names its.
 			local oldComboScore = (mhScore or 0) + (ohScore or 0)
-			AppendComparisonLine(tooltip, string.format("  Combo Main-Hand + Off-Hand %.1f: ", newComboScore), newComboScore, oldComboScore, nil)
-			AppendComparisonLine(tooltip, string.format("  Combo vs Two-Hand %.1f: ", twoHandScore), newComboScore, twoHandScore, nil)
+			-- On Blizzard's native tooltip showing your tracked Main-Hand/
+			-- Off-Hand item itself (no different candidate involved), the
+			-- "new" combo here is identical to the old one anyway - skip it
+			-- to match the Two-Hand case above, rather than print a combo
+			-- line that's just restating the status quo next to whatever
+			-- candidate's own tooltip already shows the real comparison.
+			local isOwnHandReference = (slotId == INVSLOT_MAINHAND and itemLink == mhLink)
+				or (slotId == INVSLOT_OFFHAND and itemLink == ohLink)
+			if not (isOwnHandReference and isNativeCompareTooltip) then
+				-- The new combo total is shown explicitly (not just its diff),
+				-- so it's never ambiguous whether an embedded number belongs to
+				-- the combo or to Two-Hand - "Combo Main-Hand + Off-Hand 81.4:"
+				-- names its own value before "Combo vs Two-Hand 86.3:" names its.
+				AppendComparisonLine(tooltip, string.format("  Combo Main-Hand + Off-Hand %.1f: ", newComboScore), newComboScore, oldComboScore, nil)
+				AppendComparisonLine(tooltip, string.format("  Combo vs Two-Hand %.1f: ", twoHandScore), newComboScore, twoHandScore, nil)
+			end
 
 			-- Always show all three tracked references, regardless of what's
 			-- physically equipped right now (a locked box is deliberately
