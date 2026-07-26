@@ -1898,15 +1898,19 @@ local function CreateMainFrame()
 		local button = CreateFrame("Button", "GearWeightsWeaponSlotButton" .. weaponSlotButtonIndex, dungeonRankPanel, "ItemButtonTemplate")
 		button:SetSize(30, 30)
 		if anchorTo then
-			button:SetPoint("LEFT", anchorTo, "RIGHT", 6, 0)
+			button:SetPoint("LEFT", anchorTo, "RIGHT", 8, 0)
 		else
-			button:SetPoint("TOPRIGHT", -16, -10)
+			-- -34 matches the same right-side margin the scrollbar templates
+			-- elsewhere in this panel use, so this row can't end up crowding
+			-- or overlapping the scrollbar/close button area.
+			button:SetPoint("TOPRIGHT", -34, -8)
 		end
 
 		local lockIcon = button:CreateTexture(nil, "OVERLAY")
-		lockIcon:SetSize(14, 14)
-		lockIcon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -2)
-		lockIcon:SetTexture("Interface\\BUTTONS\\LockButton-Locked-Up")
+		lockIcon:SetSize(18, 18)
+		lockIcon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 4, -4)
+		lockIcon:SetTexture("Interface\\Buttons\\LockButton-Locked-Up")
+		lockIcon:SetVertexColor(1, 0.35, 0.35)
 		lockIcon:Hide()
 		button.lockIcon = lockIcon
 
@@ -1924,16 +1928,25 @@ local function CreateMainFrame()
 
 	local function RefreshWeaponBaselineDisplay()
 		for _, box in ipairs(WEAPON_BOX_ORDER) do
-			local button = weaponBaselineButtons[box]
-			local link = GW.GetWeaponBoxLink(box)
-			if link then
-				local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(link)
-				SetItemButtonTexture(button, texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-			else
-				SetItemButtonTexture(button, nil)
+			-- Wrapped per-box: one bad/unexpected value shouldn't stop the
+			-- other two boxes from updating (this is exactly how a stale-data
+			-- bug in one box once made the others look broken too).
+			local ok = pcall(function()
+				local button = weaponBaselineButtons[box]
+				local link = GW.GetWeaponBoxLink(box)
+				if link then
+					local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(link)
+					SetItemButtonTexture(button, texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+				else
+					SetItemButtonTexture(button, nil)
+				end
+				button.link = link
+				button.lockIcon:SetShown(GW.IsWeaponBoxLocked(box))
+			end)
+			if not ok then
+				SetItemButtonTexture(weaponBaselineButtons[box], nil)
+				weaponBaselineButtons[box].link = nil
 			end
-			button.link = link
-			button.lockIcon:SetShown(GW.IsWeaponBoxLocked(box))
 		end
 	end
 	GW.RefreshWeaponBaselineDisplay = RefreshWeaponBaselineDisplay

@@ -638,7 +638,14 @@ local function EnsureWeaponBaseline()
 	GearWeightsDB = GearWeightsDB or {}
 	GearWeightsDB.weaponBaseline = GearWeightsDB.weaponBaseline or {}
 	for key in pairs(WEAPON_BOX_KEYS) do
-		GearWeightsDB.weaponBaseline[key] = GearWeightsDB.weaponBaseline[key] or { link = nil, locked = false }
+		-- An earlier version (1.21.x) stored this as a flat { locked, mainHand
+		-- = link, offHand = link } shape - mainHand/offHand were raw link
+		-- strings, not sub-tables. `or {...}` alone wouldn't replace a
+		-- leftover string (it's truthy), and assigning a field onto a string
+		-- value errors, so explicitly check the type instead of just nil.
+		if type(GearWeightsDB.weaponBaseline[key]) ~= "table" then
+			GearWeightsDB.weaponBaseline[key] = { link = nil, locked = false }
+		end
 	end
 end
 
