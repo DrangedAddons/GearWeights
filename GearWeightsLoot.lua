@@ -615,6 +615,58 @@ function GW.SetSlotLocked(slotId, locked)
 	end
 end
 
+--------------------------------------------------------------------------------
+-- Weapon baseline (2H vs Main Hand/Off Hand) - which weapon setup counts as
+-- "currently equipped" for scoring/comparison purposes. Dynamic by default
+-- (always reads whatever's actually equipped right now, so it naturally
+-- reflects your last real weapon change), but can be locked to freeze a
+-- snapshot at the moment of locking - protects comparisons from being thrown
+-- off by a temporary quest-required weapon swap.
+--------------------------------------------------------------------------------
+
+local function EnsureWeaponBaseline()
+	GearWeightsDB = GearWeightsDB or {}
+	GearWeightsDB.weaponBaseline = GearWeightsDB.weaponBaseline or { locked = false }
+end
+
+function GW.IsWeaponBaselineLocked()
+	EnsureWeaponBaseline()
+	return GearWeightsDB.weaponBaseline.locked or false
+end
+
+-- Returns mainHandLink, offHandLink - the links to treat as "currently
+-- equipped" for weapon-slot scoring: live equipped gear when unlocked, or the
+-- frozen snapshot captured at the moment of locking when locked.
+function GW.GetWeaponBaselineLinks()
+	EnsureWeaponBaseline()
+	local baseline = GearWeightsDB.weaponBaseline
+	if baseline.locked then
+		return baseline.mainHand, baseline.offHand
+	end
+	return GetInventoryItemLink("player", INVSLOT_MAINHAND), GetInventoryItemLink("player", INVSLOT_OFFHAND)
+end
+
+function GW.SetWeaponBaselineLocked(locked)
+	EnsureWeaponBaseline()
+	local baseline = GearWeightsDB.weaponBaseline
+	if locked then
+		baseline.mainHand = GetInventoryItemLink("player", INVSLOT_MAINHAND)
+		baseline.offHand = GetInventoryItemLink("player", INVSLOT_OFFHAND)
+	end
+	baseline.locked = locked and true or false
+end
+
+-- Returns the link to treat as "equipped" in this slot for scoring/comparison
+-- purposes - the tracked weapon baseline above for Main Hand/Off Hand, live
+-- equipped gear for every other slot (which has no such baseline concept).
+function GW.GetEquippedLinkForScoring(slotId)
+	if slotId == INVSLOT_MAINHAND or slotId == INVSLOT_OFFHAND then
+		local mh, oh = GW.GetWeaponBaselineLinks()
+		return slotId == INVSLOT_MAINHAND and mh or oh
+	end
+	return GetInventoryItemLink("player", slotId)
+end
+
 -- Below max level, a heirloom is deliberately kept for its scaling stats and
 -- XP bonus - a slot that happens to score higher on raw stat weights isn't
 -- actually worth swapping to for that reason alone, so treat it the same as

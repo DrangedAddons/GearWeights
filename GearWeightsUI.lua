@@ -781,6 +781,7 @@ local dungeonRankPollFrame = CreateFrame("Frame")
 dungeonRankPollFrame:Hide()
 
 RefreshDungeonRankPanel = function()
+	if GW.RefreshWeaponBaselineDisplay then GW.RefreshWeaponBaselineDisplay() end
 	local state = GW.GetDungeonRankScanState()
 	local cached = GW.GetCachedDungeonRanking()
 
@@ -1874,6 +1875,94 @@ local function CreateMainFrame()
 	local normalCheck = CreateTierCheck("normal", "Normal")
 	local heroicCheck = CreateTierCheck("heroic", "Heroic", normalCheck)
 	CreateTierCheck("mythic", "Mythic", heroicCheck)
+
+	--------------------------------------------------------------------
+	-- Weapon baseline display - 3 slot icons (Two-Hand / Main Hand / Off
+	-- Hand) mimicking the character pane's weapon slots, showing whichever
+	-- setup is currently tracked as "equipped" for scoring purposes. Click
+	-- any of them to lock/unlock the baseline (see GW.SetWeaponBaselineLocked
+	-- in GearWeightsLoot.lua) - locking freezes it against temporary
+	-- quest-required weapon swaps instead of always following live gear.
+	--------------------------------------------------------------------
+	local function CreateWeaponSlotButton(anchorTo)
+		local button = CreateFrame("Button", nil, dungeonRankPanel, "ItemButtonTemplate")
+		button:SetSize(30, 30)
+		if anchorTo then
+			button:SetPoint("LEFT", anchorTo, "RIGHT", 4, 0)
+		else
+			button:SetPoint("TOPRIGHT", -4, -4)
+		end
+		return button
+	end
+
+	local weaponBaselineTwoHandButton = CreateWeaponSlotButton()
+	local weaponBaselineMainHandButton = CreateWeaponSlotButton(weaponBaselineTwoHandButton)
+	local weaponBaselineOffHandButton = CreateWeaponSlotButton(weaponBaselineMainHandButton)
+	local weaponSlotButtons = { weaponBaselineTwoHandButton, weaponBaselineMainHandButton, weaponBaselineOffHandButton }
+
+	local weaponBaselineLockIcon = dungeonRankPanel:CreateTexture(nil, "OVERLAY")
+	weaponBaselineLockIcon:SetSize(14, 14)
+	weaponBaselineLockIcon:SetPoint("BOTTOMRIGHT", weaponBaselineOffHandButton, "TOPRIGHT", 2, 2)
+	weaponBaselineLockIcon:SetTexture("Interface\\BUTTONS\\LockButton-Locked-Up")
+	weaponBaselineLockIcon:Hide()
+
+	local function RefreshWeaponBaselineDisplay()
+		local mh, oh = GW.GetWeaponBaselineLinks()
+		local is2H = false
+		if mh then
+			local _, _, _, _, _, _, _, _, mhEquipLoc = GetItemInfo(mh)
+			is2H = mhEquipLoc == "INVTYPE_2HWEAPON"
+		end
+
+		local function SetSlotIcon(button, link)
+			if link then
+				local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(link)
+				SetItemButtonTexture(button, texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+			else
+				SetItemButtonTexture(button, nil)
+			end
+			button.link = link
+		end
+
+		SetSlotIcon(weaponBaselineTwoHandButton, is2H and mh or nil)
+		SetSlotIcon(weaponBaselineMainHandButton, (not is2H) and mh or nil)
+		SetSlotIcon(weaponBaselineOffHandButton, (not is2H) and oh or nil)
+
+		weaponBaselineLockIcon:SetShown(GW.IsWeaponBaselineLocked())
+	end
+	GW.RefreshWeaponBaselineDisplay = RefreshWeaponBaselineDisplay
+
+	local function ToggleWeaponBaselineLock()
+		GW.SetWeaponBaselineLocked(not GW.IsWeaponBaselineLocked())
+		RefreshWeaponBaselineDisplay()
+		if GW.NotifyWeightsChanged then GW.NotifyWeightsChanged() end
+		DEFAULT_CHAT_FRAME:AddMessage("GearWeights: weapon baseline is now " ..
+			(GW.IsWeaponBaselineLocked()
+				and "|cffff4444locked|r - won't change until you unlock it"
+				or "|cff00ff00dynamic|r - follows whatever you have equipped"))
+	end
+
+	local weaponSlotLabels = { "Two-Hand Weapon", "Main Hand", "Off Hand" }
+	for i, button in ipairs(weaponSlotButtons) do
+		button:SetScript("OnClick", ToggleWeaponBaselineLock)
+		button:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+			if self.link then
+				GameTooltip:SetHyperlink(self.link)
+			else
+				GameTooltip:AddLine(weaponSlotLabels[i])
+				GameTooltip:AddLine("Empty", 0.6, 0.6, 0.6)
+			end
+			GameTooltip:AddLine(" ")
+			GameTooltip:AddLine(GW.IsWeaponBaselineLocked()
+				and "|cffff4444Locked|r - click to unlock (follow equipped gear again)"
+				or "|cff00ff00Dynamic|r - click to lock this as your comparison weapon(s)")
+			GameTooltip:Show()
+		end)
+		button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	end
+
+	RefreshWeaponBaselineDisplay()
 
 	local viewBySlotCheck = CreateFrame("CheckButton", nil, dungeonRankPanel, "UICheckButtonTemplate")
 	viewBySlotCheck:SetSize(18, 18)

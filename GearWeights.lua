@@ -249,7 +249,7 @@ end
 -- (shields, one-hand weapons, held items) would score as a free "slot empty"
 -- upgrade even though equipping it would first require replacing the 2H.
 local function IsMainHandTwoHanded()
-	local mhLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
+	local mhLink = GW.GetEquippedLinkForScoring(INVSLOT_MAINHAND)
 	if not mhLink then return false end
 	local _, _, _, _, _, _, _, _, mhEquipLoc = GetItemInfo(mhLink)
 	return mhEquipLoc == "INVTYPE_2HWEAPON"
@@ -399,7 +399,7 @@ function GW.GetUniqueEligibleSlots(itemLink, slots)
 
 	local sameNameSlots = {}
 	for _, slotId in ipairs(slots) do
-		local equippedLink = GetInventoryItemLink("player", slotId)
+		local equippedLink = GW.GetEquippedLinkForScoring(slotId)
 		if equippedLink then
 			if equippedLink == itemLink then
 				table.insert(sameNameSlots, slotId)
@@ -634,8 +634,7 @@ function GW.GetBestUpgradeDiff(itemLink)
 
 	if equipLoc == "INVTYPE_2HWEAPON" then
 		if GW.GetSlotIgnoreReason(INVSLOT_MAINHAND) then return score, nil end
-		local mhLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
-		local ohLink = GetInventoryItemLink("player", INVSLOT_OFFHAND)
+		local mhLink, ohLink = GW.GetWeaponBaselineLinks()
 		local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
 		return score, score - comboScore
 	end
@@ -652,7 +651,7 @@ function GW.GetBestUpgradeDiff(itemLink)
 	local bestDiff
 	for _, slotId in ipairs(slots) do
 		if not GW.GetSlotIgnoreReason(slotId) then
-			local equippedLink = GetInventoryItemLink("player", slotId)
+			local equippedLink = GW.GetEquippedLinkForScoring(slotId)
 			local diff
 			if not equippedLink then
 				if not (slotId == INVSLOT_OFFHAND and IsMainHandTwoHanded()) then
@@ -697,12 +696,11 @@ local function AppendScoreLines(tooltip, itemLink)
 	-- A 2H weapon replaces both the main hand and off hand, so compare it against
 	-- the combined score of whatever is currently in both slots, not just one.
 	if equipLoc == "INVTYPE_2HWEAPON" then
-		if GetInventoryItemLink("player", INVSLOT_MAINHAND) == itemLink then
+		if GW.GetEquippedLinkForScoring(INVSLOT_MAINHAND) == itemLink then
 			tooltip:Show()
 			return
 		end
-		local mhLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
-		local ohLink = GetInventoryItemLink("player", INVSLOT_OFFHAND)
+		local mhLink, ohLink = GW.GetWeaponBaselineLinks()
 		local mhIgnoreReason = GW.GetSlotIgnoreReason(INVSLOT_MAINHAND)
 		if not mhLink and not ohLink then
 			tooltip:AddLine(mhIgnoreReason and ("|cff888888Upgrade (weapon slots empty) (" .. mhIgnoreReason .. ")|r") or "|cff00ff00Upgrade (weapon slots empty)|r")
@@ -727,7 +725,7 @@ local function AppendScoreLines(tooltip, itemLink)
 	-- against the thing you're actually considering, when it isn't. Just show
 	-- the plain score instead of a comparison that isn't about that decision.
 	for _, slotId in ipairs(slots) do
-		if GetInventoryItemLink("player", slotId) == itemLink then
+		if GW.GetEquippedLinkForScoring(slotId) == itemLink then
 			tooltip:Show()
 			return
 		end
@@ -742,7 +740,7 @@ local function AppendScoreLines(tooltip, itemLink)
 	for _, s in ipairs(eligibleSlots) do uniqueEligible[s] = true end
 
 	for _, slotId in ipairs(slots) do
-		local equippedLink = GetInventoryItemLink("player", slotId)
+		local equippedLink = GW.GetEquippedLinkForScoring(slotId)
 		local label = slotLabels[slotId]
 		local prefix = label and (label .. ": ") or ""
 		local slotBlockedBy2H = slotId == INVSLOT_OFFHAND and IsMainHandTwoHanded()
@@ -775,7 +773,7 @@ local function AppendScoreLines(tooltip, itemLink)
 		-- which can't actually be paired with anything.
 		local otherSlot = otherWeaponSlot[slotId]
 		if otherSlot and not slotBlockedBy2H then
-			local otherLink = GetInventoryItemLink("player", otherSlot)
+			local otherLink = GW.GetEquippedLinkForScoring(otherSlot)
 			if otherLink ~= itemLink then
 				local otherScore = otherLink and GW.GetItemScore(otherLink) or 0
 				tooltip:AddLine(string.format("  |cff888888Main Hand + Off Hand combo: %.1f|r", score + otherScore))
