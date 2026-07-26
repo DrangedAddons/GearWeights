@@ -780,20 +780,22 @@ AppendScoreLines = function(tooltip, itemLink)
 	-- only whichever currently scores higher, since you want to know how it
 	-- stacks up against each on its own terms.
 	if equipLoc == "INVTYPE_2HWEAPON" then
-		if GW.GetWeaponBoxLink("twoHand") == itemLink then
-			tooltip:Show()
-			return
-		end
 		local mhIgnoreReason = GW.GetSlotIgnoreReason(INVSLOT_MAINHAND)
 		local twoHandLink = GW.GetWeaponBoxLink("twoHand")
 		local mhLink = GW.GetWeaponBoxLink("mainHand")
 		local ohLink = GW.GetWeaponBoxLink("offHand")
+		-- Comparing this item against itself (you're looking at whatever's
+		-- currently in the Two-Hand box) is meaningless and skipped, but the
+		-- combo comparison below is still real, useful information even then.
+		local isOwnTwoHandReference = twoHandLink == itemLink
 		if not twoHandLink and not mhLink and not ohLink then
 			tooltip:AddLine(mhIgnoreReason and ("|cff888888Upgrade (weapon slots empty) (" .. mhIgnoreReason .. ")|r") or "|cff00ff00Upgrade (weapon slots empty)|r")
 		else
-			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
+			if not isOwnTwoHandReference then
+				local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
+				AppendComparisonLine(tooltip, "vs Two-Hand: ", score, twoHandScore, mhIgnoreReason)
+			end
 			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
-			AppendComparisonLine(tooltip, "vs Two-Hand: ", score, twoHandScore, mhIgnoreReason)
 			AppendComparisonLine(tooltip, "vs Main Hand + Off Hand combo: ", score, comboScore, mhIgnoreReason)
 			-- Blizzard's native compare tooltip already shows whichever
 			-- loadout is physically equipped right now - only add the OTHER
@@ -802,7 +804,7 @@ AppendScoreLines = function(tooltip, itemLink)
 				if IsMainHandTwoHanded() then
 					ShowWeaponReferenceTooltip(mhLink, "Main Hand")
 					ShowWeaponReferenceTooltip(ohLink, "Off Hand")
-				else
+				elseif not isOwnTwoHandReference then
 					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand")
 				end
 			end
