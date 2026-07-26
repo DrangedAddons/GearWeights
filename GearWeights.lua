@@ -766,7 +766,11 @@ local function ShowWeaponReferenceTooltip(referenceLink, label, comparisons)
 	end
 	if comparisons then
 		for _, c in ipairs(comparisons) do
-			AppendComparisonLine(tt, c.prefix, c.score, c.vsScore, nil)
+			if c.info then
+				tt:AddLine(c.info, 0.7, 0.7, 0.7)
+			else
+				AppendComparisonLine(tt, c.prefix, c.score, c.vsScore, nil)
+			end
 		end
 	end
 	tt:AddLine(" ")
@@ -838,6 +842,13 @@ local function AppendScoreLines(tooltip, itemLink)
 			if not isOwnTwoHandReference then
 				AppendComparisonLine(tooltip, string.format("vs Two-Hand %.1f: ", twoHandScore), score, twoHandScore, mhIgnoreReason)
 			end
+			-- A 2H candidate doesn't change your Main-Hand + Off-Hand combo at
+			-- all (unlike a Main-Hand/Off-Hand candidate, where the combo line
+			-- above it already establishes what "combo" means numerically
+			-- here) - so state the existing combo's value plainly first,
+			-- otherwise "Combo vs Two-Hand" below has no established referent
+			-- and reads ambiguously about which number is which.
+			tooltip:AddLine(string.format("Main-Hand + Off-Hand Combo: %.1f", comboScore), 0.7, 0.7, 0.7)
 			-- Framed with Combo as the subject ("Combo vs Two-Hand: Upgrade/
 			-- Downgrade"), same as every other combo comparison in this
 			-- feature, rather than "vs combo: Upgrade" from the 2H's own
@@ -852,13 +863,14 @@ local function AppendScoreLines(tooltip, itemLink)
 			-- ShowWeaponReferenceTooltip itself skips one that would just
 			-- duplicate whatever Blizzard's own compare tooltip already shows.
 			if showReferenceTooltips then
+				local comboInfo = { info = string.format("Main-Hand + Off-Hand Combo: %.1f", comboScore) }
 				local comboComparison = { score = comboScore, vsScore = score,
 					prefix = string.format("Combo vs Two-Hand %.1f: ", score) }
 				if mhLink then
-					ShowWeaponReferenceTooltip(mhLink, "Main-Hand", { comboComparison })
+					ShowWeaponReferenceTooltip(mhLink, "Main-Hand", { comboInfo, comboComparison })
 				end
 				if ohLink then
-					ShowWeaponReferenceTooltip(ohLink, "Off-Hand", { comboComparison })
+					ShowWeaponReferenceTooltip(ohLink, "Off-Hand", { comboInfo, comboComparison })
 				end
 				if not isOwnTwoHandReference then
 					ShowWeaponReferenceTooltip(twoHandLink, "Two-Hand", { {
