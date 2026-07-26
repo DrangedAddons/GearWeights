@@ -1900,10 +1900,10 @@ local function CreateMainFrame()
 		if anchorTo then
 			button:SetPoint("LEFT", anchorTo, "RIGHT", 8, 0)
 		else
-			-- -34 matches the same right-side margin the scrollbar templates
-			-- elsewhere in this panel use, so this row can't end up crowding
-			-- or overlapping the scrollbar/close button area.
-			button:SetPoint("TOPRIGHT", -34, -8)
+			-- Its own row, below the View by Slot checkbox and above the scan
+			-- button (which - along with everything below it - is shifted
+			-- down to make room; see the anchor changes further down).
+			button:SetPoint("TOPLEFT", 0, -46)
 		end
 
 		local lockIcon = button:CreateTexture(nil, "OVERLAY")
@@ -2010,7 +2010,7 @@ local function CreateMainFrame()
 	-- checkbox labels doesn't reliably fit once the window is resized narrow.
 	local dungeonRankRescan = CreateFrame("Button", nil, dungeonRankPanel, "UIPanelButtonTemplate")
 	dungeonRankRescan:SetSize(170, 20)
-	dungeonRankRescan:SetPoint("TOPLEFT", 0, -46)
+	dungeonRankRescan:SetPoint("TOPLEFT", 0, -80)
 	dungeonRankRescan:SetText("Scan All Dungeons/Raids")
 	dungeonRankRescan:SetScript("OnClick", function()
 		GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
@@ -2018,12 +2018,12 @@ local function CreateMainFrame()
 	end)
 
 	dungeonRankStatusText = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -72)
+	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -106)
 	dungeonRankStatusText:SetPoint("RIGHT", -2, 0)
 	dungeonRankStatusText:SetJustifyH("LEFT")
 
 	dungeonRankScrollFrame = CreateFrame("ScrollFrame", "GearWeightsDungeonRankScrollFrame", dungeonRankPanel, "UIPanelScrollFrameTemplate")
-	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -92)
+	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -126)
 	dungeonRankScrollFrame:SetPoint("BOTTOMRIGHT", -34, 2)
 
 	dungeonRankContent = CreateFrame("Frame", nil, dungeonRankScrollFrame)

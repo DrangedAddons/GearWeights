@@ -186,8 +186,6 @@ local slotLabels = {
 	[INVSLOT_MAINHAND] = "Main Hand", [INVSLOT_OFFHAND] = "Off Hand",
 }
 
-local otherWeaponSlot = { [INVSLOT_MAINHAND] = INVSLOT_OFFHAND, [INVSLOT_OFFHAND] = INVSLOT_MAINHAND }
-
 -- Shared with GearWeightsUI.lua (Settings tab checklist) and the character
 -- pane ctrl+click handler below, so both stay in sync with one list.
 GW.SLOT_LOCK_LABEL = {
@@ -618,12 +616,6 @@ local function AppendComparisonLine(tooltip, prefix, score, equippedScore, ignor
 	end
 end
 
-local WEAPON_LOADOUT_LABEL = { twoHand = "Two-Hand", combo = "Main Hand + Off Hand" }
-local function AppendLoadoutFlipNote(tooltip, flips, newBetter)
-	if not flips then return end
-	tooltip:AddLine(string.format("  |cffff8800This would make %s your better weapon loadout!|r",
-		WEAPON_LOADOUT_LABEL[newBetter] or newBetter))
-end
 
 -- Returns score, bestDiff, usable, flipsLoadout. bestDiff is nil if the item
 -- isn't equippable, or the best-case score difference vs whatever it could
@@ -714,9 +706,11 @@ local function AppendScoreLines(tooltip, itemLink)
 		return
 	end
 
-	-- A 2H weapon replaces both the main hand and off hand, so compare it
-	-- against whichever of your two remembered weapon loadouts (a 2H, or a
-	-- Main Hand + Off Hand combo) scores higher - see GW.GetTwoHandComparisonScore.
+	-- A 2H weapon replaces both the main hand and off hand, so it's compared
+	-- against BOTH of your remembered weapon loadouts independently - your
+	-- Two-Hand reference, and your Main Hand + Off Hand combo - rather than
+	-- only whichever currently scores higher, since you want to know how it
+	-- stacks up against each on its own terms.
 	if equipLoc == "INVTYPE_2HWEAPON" then
 		if GW.GetWeaponBoxLink("twoHand") == itemLink then
 			tooltip:Show()
@@ -731,13 +725,8 @@ local function AppendScoreLines(tooltip, itemLink)
 		else
 			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
 			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
-			if comboScore >= twoHandScore then
-				AppendComparisonLine(tooltip, "Main Hand + Off Hand combo: ", score, comboScore, mhIgnoreReason)
-			else
-				AppendComparisonLine(tooltip, "Two-Hand reference: ", score, twoHandScore, mhIgnoreReason)
-			end
-			local flips, newBetter = GW.CheckWeaponLoadoutFlip("twoHand", score)
-			AppendLoadoutFlipNote(tooltip, flips, newBetter)
+			AppendComparisonLine(tooltip, "vs Two-Hand: ", score, twoHandScore, mhIgnoreReason)
+			AppendComparisonLine(tooltip, "vs Main Hand + Off Hand combo: ", score, comboScore, mhIgnoreReason)
 		end
 		tooltip:Show()
 		return
@@ -798,23 +787,25 @@ local function AppendScoreLines(tooltip, itemLink)
 			end
 		end
 
+		-- Weapons are a two-piece system: also compare what the Main Hand +
+		-- Off Hand total would be with this item in this slot (alongside
+		-- whichever tracked reference occupies the other hand) against your
+		-- Two-Hand reference - independent of what's physically equipped
+		-- right now, since the whole point of the reference boxes is to
+		-- reason about your intended loadout even if you're literally
+		-- wearing a quest weapon at this moment.
 		if slotId == INVSLOT_MAINHAND or slotId == INVSLOT_OFFHAND then
-			local replacingBox = slotId == INVSLOT_MAINHAND and "mainHand" or "offHand"
-			local flips, newBetter = GW.CheckWeaponLoadoutFlip(replacingBox, score)
-			AppendLoadoutFlipNote(tooltip, flips, newBetter)
-		end
-
-		-- Weapons are a two-piece system: also show what the Main Hand + Off Hand
-		-- total would be with this item in this slot, alongside whatever's
-		-- currently in the other hand - unless that other hand holds a 2H,
-		-- which can't actually be paired with anything.
-		local otherSlot = otherWeaponSlot[slotId]
-		if otherSlot and not slotBlockedBy2H then
-			local otherLink = GW.GetEquippedLinkForScoring(otherSlot)
-			if otherLink ~= itemLink then
-				local otherScore = otherLink and GW.GetItemScore(otherLink) or 0
-				tooltip:AddLine(string.format("  |cff888888Main Hand + Off Hand combo: %.1f|r", score + otherScore))
+			local mhLink = GW.GetWeaponBoxLink("mainHand")
+			local ohLink = GW.GetWeaponBoxLink("offHand")
+			local newComboScore
+			if slotId == INVSLOT_MAINHAND then
+				newComboScore = score + (ohLink and GW.GetItemScore(ohLink) or 0)
+			else
+				newComboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + score
 			end
+			local twoHandLink = GW.GetWeaponBoxLink("twoHand")
+			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
+			AppendComparisonLine(tooltip, "  Combo vs Two-Hand: ", newComboScore, twoHandScore, nil)
 		end
 	end
 
