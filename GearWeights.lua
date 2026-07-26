@@ -1093,6 +1093,30 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 		end
 	elseif msg == "bossdiag" then
 		if GW.DumpBossAndGlowDiag then GW.DumpBossAndGlowDiag() end
+	elseif msg == "vendordiag" then
+		if not MerchantFrame or not MerchantFrame:IsShown() then
+			DEFAULT_CHAT_FRAME:AddMessage("GearWeights: open a merchant window first.")
+		else
+			local n = GetMerchantNumItems()
+			DEFAULT_CHAT_FRAME:AddMessage("-- Vendor diag: " .. tostring(n) .. " items --")
+			for i = 1, n do
+				local link = GetMerchantItemLink(i)
+				local name, _, price, stack, numAvailable, isUsable, extendedCost = GetMerchantItemInfo(i)
+				DEFAULT_CHAT_FRAME:AddMessage(string.format(
+					"  [%d] %s  price=%s  stack=%s  extendedCost=%s  link=%s",
+					i, tostring(name), tostring(price), tostring(stack), tostring(extendedCost), tostring(link)))
+				if extendedCost then
+					local costKinds = GetMerchantItemCostInfo(i)
+					DEFAULT_CHAT_FRAME:AddMessage("      costKinds=" .. tostring(costKinds))
+					for j = 1, (costKinds or 0) do
+						local costTexture, costAmount, costLink, currencyName = GetMerchantItemCostItem(i, j)
+						DEFAULT_CHAT_FRAME:AddMessage(string.format(
+							"      cost %d: amount=%s link=%s currencyName=%s texture=%s",
+							j, tostring(costAmount), tostring(costLink), tostring(currencyName), tostring(costTexture)))
+					end
+				end
+			end
+		end
 	else
 		if GearWeightsUI_Toggle then GearWeightsUI_Toggle() end
 	end
