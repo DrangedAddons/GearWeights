@@ -821,21 +821,76 @@ function GW.GetVendorPriceInfo(itemLink)
 	return GearWeightsDB.vendorPrices[itemId]
 end
 
+-- Manually verified prices for the Mark of Triumph Vendor - confirmed on this
+-- server via /gw vendordiag (extendedCost is flagged true for every item
+-- here, but neither the structured cost API nor the tooltip exposes the
+-- actual amount - see GW.FormatVendorPrice). Keyed by item name rather than
+-- item ID: AtlasLoot's bundled MarkOfTriumph data doesn't match what's
+-- actually live on this server for 6 of these 36 items, so name is the only
+-- reliable match key without risking a wrong ID.
+local KNOWN_VENDOR_PRICES = {
+	["Centurion's Barbute"] = { amount = 85, currencyName = "Mark of Triumph" },
+	["Searing Sun Greathelm"] = { amount = 85, currencyName = "Mark of Triumph" },
+	["Microscopic Focusing Lens"] = { amount = 85, currencyName = "Mark of Triumph" },
+	["Birdbrain's Cage"] = { amount = 85, currencyName = "Mark of Triumph" },
+	["Assassin's Cover"] = { amount = 85, currencyName = "Mark of Triumph" },
+	["Spiritual Tauren Headdress"] = { amount = 85, currencyName = "Mark of Triumph" },
+	["Rubicon Crown"] = { amount = 85, currencyName = "Mark of Triumph" },
+	["Shroud of the Cathedral"] = { amount = 85, currencyName = "Mark of Triumph" },
+	["Golden Greathelm"] = { amount = 85, currencyName = "Mark of Triumph" },
+	["Wraith Choker"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Lichbone Neck"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Memento of Quel'thalas"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Molten Forged Necklace"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Dragonfang Talisman"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Ring of the Damned"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Band of the Titans"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Azerothian Diamond Ring"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Ironguard Signet"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Spellbound Demonic Rune"] = { amount = 80, currencyName = "Mark of Triumph" },
+	["Rose of Remembrance"] = { amount = 80, currencyName = "Mark of Triumph" },
+	["Drakefury Scale"] = { amount = 80, currencyName = "Mark of Triumph" },
+	["Signet of Vitality"] = { amount = 80, currencyName = "Mark of Triumph" },
+	["Aegis of Defense"] = { amount = 65, currencyName = "Mark of Triumph" },
+	["Aegis of Impunity"] = { amount = 65, currencyName = "Mark of Triumph" },
+	["Aegis of Sanctity"] = { amount = 65, currencyName = "Mark of Triumph" },
+	["Soothing Aquamarine Cloak"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Scarlet Friar's Cloak"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Cape of Eternal Shrouding"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Ursinefur Cloak"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Dungeonlord's Drape"] = { amount = 60, currencyName = "Mark of Triumph" },
+	["Bloodied Bone Dagger"] = { amount = 55, currencyName = "Mark of Triumph" },
+	["Draenei Focusing Crystal"] = { amount = 70, currencyName = "Mark of Triumph" },
+	["Holdable Ruby"] = { amount = 70, currencyName = "Mark of Triumph" },
+	["Blessed Windstone"] = { amount = 70, currencyName = "Mark of Triumph" },
+	["Hoodoo Detector"] = { amount = 70, currencyName = "Mark of Triumph" },
+	["Lunar Splinter"] = { amount = 70, currencyName = "Mark of Triumph" },
+}
+
 function GW.FormatVendorPrice(itemLink)
 	local info = GW.GetVendorPriceInfo(itemLink)
-	if not info then return "|cff888888price unknown - visit vendor|r" end
 
 	local parts = {}
-	if info.copper and info.copper > 0 then
-		table.insert(parts, GetCoinTextureString(info.copper))
-	end
-	if info.costs then
-		for _, cost in ipairs(info.costs) do
-			local name = (cost.link and GetItemInfo(cost.link)) or cost.currencyName or "?"
-			table.insert(parts, string.format("%d %s", cost.amount, name))
+	if info then
+		if info.copper and info.copper > 0 then
+			table.insert(parts, GetCoinTextureString(info.copper))
+		end
+		if info.costs then
+			for _, cost in ipairs(info.costs) do
+				local name = (cost.link and GetItemInfo(cost.link)) or cost.currencyName or "?"
+				table.insert(parts, string.format("%d %s", cost.amount, name))
+			end
 		end
 	end
 	if #parts > 0 then return table.concat(parts, ", ") end
+
+	local itemName = GetItemInfo(itemLink)
+	local known = itemName and KNOWN_VENDOR_PRICES[itemName]
+	if known then
+		return string.format("%d %s", known.amount, known.currencyName)
+	end
+
+	if not info then return "|cff888888price unknown - visit vendor|r" end
 
 	-- Some custom-currency vendors (confirmed on this server) flag
 	-- extendedCost true but expose zero cost details through either the
