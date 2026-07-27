@@ -1588,9 +1588,11 @@ local function ShowSettingsTab()
 	lootTabBtn:Enable()
 	-- Locked slots can also change via ctrl+click on the character pane, so
 	-- sync the checkboxes with current state each time this tab is shown.
+	-- Checked = included, the inverse of GW.IsSlotLocked - see the checkbox
+	-- creation comment above for why.
 	if lockedSlotChecks then
 		for slotId, check in pairs(lockedSlotChecks) do
-			check:SetChecked(GW.IsSlotLocked(slotId))
+			check:SetChecked(not GW.IsSlotLocked(slotId))
 		end
 	end
 end
@@ -2155,11 +2157,11 @@ local function CreateMainFrame()
 	-- rebuilding it from scratch.
 	local lockedSlotsHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	lockedSlotsHeader:SetPoint("TOPLEFT", targetLootCheck, "BOTTOMLEFT", 0, -30)
-	lockedSlotsHeader:SetText("Locked Slots")
+	lockedSlotsHeader:SetText("Included Slots")
 
 	local lockedSlotsHint = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	lockedSlotsHint:SetPoint("TOPLEFT", lockedSlotsHeader, "BOTTOMLEFT", 0, -2)
-	lockedSlotsHint:SetText("Ctrl+click an upgrade item in the Instance Loot list to toggle - locked slots are still scored, just never counted as an upgrade.")
+	lockedSlotsHint:SetText("Checked slots are looked at for upgrades. Uncheck a slot (or Ctrl+click an upgrade item in the Instance Loot list) to stop - it's still scored, just never counted as an upgrade.")
 	lockedSlotsHint:SetWidth(370)
 	lockedSlotsHint:SetJustifyH("LEFT")
 
@@ -2173,9 +2175,14 @@ local function CreateMainFrame()
 		local check = CreateFrame("CheckButton", nil, settingsContent, "UICheckButtonTemplate")
 		check:SetSize(18, 18)
 		check:SetPoint("TOPLEFT", lockedSlotsHint, "BOTTOMLEFT", col * LOCKED_SLOT_COL_WIDTH, -20 - row * LOCKED_SLOT_ROW_HEIGHT)
-		check:SetChecked(GW.IsSlotLocked(slotId))
+		-- Checked = included (the positive, whitelist framing) - the
+		-- opposite of GW.IsSlotLocked, which stores the negative
+		-- ("excluded") internally. All slots default to included, since
+		-- IsSlotLocked defaults to false for anything never explicitly
+		-- toggled.
+		check:SetChecked(not GW.IsSlotLocked(slotId))
 		check:SetScript("OnClick", function(self)
-			GW.SetSlotLocked(slotId, self:GetChecked() and true or false)
+			GW.SetSlotLocked(slotId, not (self:GetChecked() and true or false))
 		end)
 		local text = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
