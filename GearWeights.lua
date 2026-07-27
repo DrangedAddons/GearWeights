@@ -211,6 +211,12 @@ GW.LOCKABLE_SLOT_ORDER = {
 	INVSLOT_RANGED,
 }
 
+-- The four armor material types - used for the Settings tab's per-type
+-- upgrade filter (GW.IsArmorTypeExcluded, GearWeightsLoot.lua) and to grey
+-- out a type the player's class can't even wear (GW.CanUseArmorType below).
+GW.ARMOR_TYPE_ORDER = { "Plate", "Mail", "Leather", "Cloth" }
+GW.ARMOR_TYPE_SET = { Plate = true, Mail = true, Leather = true, Cloth = true }
+
 -- Ctrl+click an upgrade item shown in the /gw window (Instance Loot or the
 -- dungeon/raid ranking list) to toggle "ignore upgrades here" for whichever
 -- slot(s) that item would occupy - for a piece you're deliberately keeping
@@ -320,6 +326,13 @@ local function HasProficiencyFor(itemSubType)
 		return false
 	end
 	return proficiencySet[itemSubType] == true
+end
+
+-- Exposed for the Settings tab's armor-type filter - same skill-proficiency
+-- scan GW.IsItemUsable already uses for real items, just callable directly
+-- with a known type name (e.g. "Plate") rather than needing an item link.
+function GW.CanUseArmorType(armorType)
+	return HasProficiencyFor(armorType)
 end
 
 -- Relics (Libram/Idol/Totem/Sigil) aren't gated by a skill line at all - they
@@ -661,22 +674,30 @@ function GW.GetBestUpgradeDiff(itemLink)
 	-- in some other slot would suggest an upgrade you couldn't actually equip.
 	slots = GW.GetUniqueEligibleSlots(itemLink, slots)
 
+	-- An excluded armor type (Cloth/Leather/Mail/Plate, Settings tab) is a
+	-- property of this item, not any one slot - if set, the item is still
+	-- scored (score already returned above) but never counted as a real
+	-- upgrade, same as every slot below being individually locked.
+	local armorIgnoreReason = GW.GetArmorTypeIgnoreReason(itemLink)
+
 	local bestDiff, bestSlotId
-	for _, slotId in ipairs(slots) do
-		if not GW.GetSlotIgnoreReason(slotId) then
-			local equippedLink = GW.GetEquippedLinkForScoring(slotId)
-			local diff
-			if not equippedLink then
-				if not (slotId == INVSLOT_OFFHAND and IsMainHandTwoHanded()) then
-					diff = score
+	if not armorIgnoreReason then
+		for _, slotId in ipairs(slots) do
+			if not GW.GetSlotIgnoreReason(slotId) then
+				local equippedLink = GW.GetEquippedLinkForScoring(slotId)
+				local diff
+				if not equippedLink then
+					if not (slotId == INVSLOT_OFFHAND and IsMainHandTwoHanded()) then
+						diff = score
+					end
+				elseif equippedLink ~= itemLink then
+					local equippedScore = GW.GetItemScore(equippedLink)
+					if equippedScore then diff = score - equippedScore end
 				end
-			elseif equippedLink ~= itemLink then
-				local equippedScore = GW.GetItemScore(equippedLink)
-				if equippedScore then diff = score - equippedScore end
-			end
-			if diff and (not bestDiff or diff > bestDiff) then
-				bestDiff = diff
-				bestSlotId = slotId
+				if diff and (not bestDiff or diff > bestDiff) then
+					bestDiff = diff
+					bestSlotId = slotId
+				end
 			end
 		end
 	end
@@ -973,13 +994,19 @@ local function AppendScoreLines(tooltip, itemLink)
 	local uniqueEligible = {}
 	for _, s in ipairs(eligibleSlots) do uniqueEligible[s] = true end
 
+	-- An excluded armor type (Cloth/Leather/Mail/Plate, Settings tab) is a
+	-- property of this item itself, not any one slot - computed once and
+	-- folded into every slot's ignore reason below, same "still shown, not
+	-- counted as a real upgrade" treatment a locked slot gets.
+	local armorIgnoreReason = GW.GetArmorTypeIgnoreReason(itemLink)
+
 	local shownTwoHandReference = false
 	for _, slotId in ipairs(slots) do
 		local equippedLink = GW.GetEquippedLinkForScoring(slotId)
 		local label = slotLabels[slotId]
 		local prefix = label and (label .. ": ") or ""
 		local slotBlockedBy2H = slotId == INVSLOT_OFFHAND and IsMainHandTwoHanded()
-		local slotIgnoreReason = GW.GetSlotIgnoreReason(slotId)
+		local slotIgnoreReason = GW.GetSlotIgnoreReason(slotId) or armorIgnoreReason
 		if uniqueNarrowed and not uniqueEligible[slotId] and equippedLink and equippedLink ~= itemLink then
 			local equippedScore = GW.GetItemScore(equippedLink)
 			if equippedScore then

@@ -2165,7 +2165,9 @@ local function CreateMainFrame()
 	lockedSlotsHint:SetWidth(370)
 	lockedSlotsHint:SetJustifyH("LEFT")
 
-	local LOCKED_SLOT_COL_WIDTH = 190
+	-- Narrower than before (was 190) to leave room for the armor-type list
+	-- as a third column to the right, within the panel's fixed content width.
+	local LOCKED_SLOT_COL_WIDTH = 165
 	local LOCKED_SLOT_ROW_HEIGHT = 22
 	lockedSlotChecks = {}
 	for i, slotId in ipairs(GW.LOCKABLE_SLOT_ORDER) do
@@ -2191,6 +2193,50 @@ local function CreateMainFrame()
 		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
 		text:SetText(GW.SLOT_LOCK_LABEL[slotId])
 		lockedSlotChecks[slotId] = check
+	end
+
+	-- Armor type filter - a short vertical list to the right of the slot
+	-- columns above. Same whitelist framing: checked (the default) means
+	-- that armor type is looked at for upgrades. A type the player's class
+	-- can't wear at all is greyed out and non-interactive (still shown
+	-- checked, for visual consistency with the others - it just never
+	-- matters, since GW.IsItemUsable already filters those items out before
+	-- this setting would ever apply to them).
+	local ARMOR_TYPE_COLUMN_X = 2 * LOCKED_SLOT_COL_WIDTH
+	local armorTypeChecks = {}
+	for i, armorType in ipairs(GW.ARMOR_TYPE_ORDER) do
+		local check = CreateFrame("CheckButton", nil, settingsContent, "UICheckButtonTemplate")
+		check:SetSize(18, 18)
+		check:SetPoint("TOPLEFT", lockedSlotsHint, "BOTTOMLEFT", ARMOR_TYPE_COLUMN_X, -20 - (i - 1) * LOCKED_SLOT_ROW_HEIGHT)
+		local text = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
+		text:SetText(armorType)
+
+		if GW.CanUseArmorType(armorType) then
+			check:SetChecked(not GW.IsArmorTypeExcluded(armorType))
+			check:SetScript("OnClick", function(self)
+				GW.SetArmorTypeExcluded(armorType, not (self:GetChecked() and true or false))
+			end)
+		else
+			check:SetChecked(true)
+			check:Disable()
+			text:SetFontObject("GameFontDisableSmall")
+			-- FontStrings can't take mouse scripts directly, so a small
+			-- invisible hitbox frame spans both the checkbox and label to
+			-- make the whole line hoverable, not just the checkbox itself.
+			local hitbox = CreateFrame("Frame", nil, settingsContent)
+			hitbox:SetPoint("TOPLEFT", check, "TOPLEFT", 0, 0)
+			hitbox:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 0, 0)
+			hitbox:EnableMouse(true)
+			hitbox:SetScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:AddLine("Can't wear " .. armorType, 1, 0.2, 0.2)
+				GameTooltip:AddLine("Your class has no proficiency with this armor type, so it's never shown as an upgrade anyway.", nil, nil, nil, true)
+				GameTooltip:Show()
+			end)
+			hitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		end
+		armorTypeChecks[armorType] = check
 	end
 
 	return f

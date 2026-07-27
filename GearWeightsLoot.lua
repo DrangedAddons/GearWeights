@@ -826,6 +826,39 @@ function GW.GetSlotIgnoreReason(slotId)
 	return nil
 end
 
+-- Armor-type filter (Settings tab): whether Cloth/Leather/Mail/Plate
+-- upgrades are excluded from counting, independent of any one slot. All
+-- four default to included (not excluded) - nothing in the saved table
+-- means "included", matching GW.IsSlotLocked's own default.
+function GW.IsArmorTypeExcluded(armorType)
+	EnsureLootSettings()
+	GearWeightsDB.settings.excludedArmorTypes = GearWeightsDB.settings.excludedArmorTypes or {}
+	return GearWeightsDB.settings.excludedArmorTypes[armorType] == true
+end
+
+function GW.SetArmorTypeExcluded(armorType, excluded)
+	EnsureLootSettings()
+	GearWeightsDB.settings.excludedArmorTypes = GearWeightsDB.settings.excludedArmorTypes or {}
+	if excluded then
+		GearWeightsDB.settings.excludedArmorTypes[armorType] = true
+	else
+		GearWeightsDB.settings.excludedArmorTypes[armorType] = nil
+	end
+end
+
+-- Whether a candidate item's own armor material type has been excluded from
+-- upgrade counting - a property of the item itself, not any one slot, so
+-- this is a separate check from GW.GetSlotIgnoreReason rather than folded
+-- into it.
+function GW.GetArmorTypeIgnoreReason(itemLink)
+	if not itemLink then return nil end
+	local _, _, _, _, _, _, itemSubType = GetItemInfo(itemLink)
+	if itemSubType and GW.ARMOR_TYPE_SET[itemSubType] and GW.IsArmorTypeExcluded(itemSubType) then
+		return "Excluded armor type"
+	end
+	return nil
+end
+
 local lastZoneChecked
 local MAX_SCAN_RETRIES = 8
 local RETRY_INTERVAL = 3
