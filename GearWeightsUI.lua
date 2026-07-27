@@ -2165,13 +2165,16 @@ local function CreateMainFrame()
 	lockedSlotsHint:SetWidth(370)
 	lockedSlotsHint:SetJustifyH("LEFT")
 
-	local LOCKED_SLOT_COLUMNS = 2
 	local LOCKED_SLOT_COL_WIDTH = 190
 	local LOCKED_SLOT_ROW_HEIGHT = 22
 	lockedSlotChecks = {}
 	for i, slotId in ipairs(GW.LOCKABLE_SLOT_ORDER) do
-		local col = (i - 1) % LOCKED_SLOT_COLUMNS
-		local row = math.floor((i - 1) / LOCKED_SLOT_COLUMNS)
+		-- Column-major (fills the left column top-to-bottom, then the
+		-- right), matching the character pane's paperdoll layout - not
+		-- row-major left-right-left-right, since GW.LOCKABLE_SLOT_ORDER is
+		-- ordered specifically for this per-column split.
+		local col = (i > GW.LOCKABLE_SLOT_LEFT_COUNT) and 1 or 0
+		local row = (col == 0) and (i - 1) or (i - 1 - GW.LOCKABLE_SLOT_LEFT_COUNT)
 		local check = CreateFrame("CheckButton", nil, settingsContent, "UICheckButtonTemplate")
 		check:SetSize(18, 18)
 		check:SetPoint("TOPLEFT", lockedSlotsHint, "BOTTOMLEFT", col * LOCKED_SLOT_COL_WIDTH, -20 - row * LOCKED_SLOT_ROW_HEIGHT)

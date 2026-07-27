@@ -196,11 +196,19 @@ GW.SLOT_LOCK_LABEL = {
 	[INVSLOT_TRINKET1] = "Trinket 1", [INVSLOT_TRINKET2] = "Trinket 2",
 	[INVSLOT_MAINHAND] = "Main-Hand", [INVSLOT_OFFHAND] = "Off-Hand", [INVSLOT_RANGED] = "Ranged",
 }
+-- Ordered to match the character pane's two-column paperdoll layout - the
+-- first GW.LOCKABLE_SLOT_LEFT_COUNT entries are the left column (top to
+-- bottom), the rest are the right column. See the Settings tab checkbox
+-- layout in GearWeightsUI.lua, which fills column-major using that count.
+GW.LOCKABLE_SLOT_LEFT_COUNT = 8
 GW.LOCKABLE_SLOT_ORDER = {
+	-- Left column
 	INVSLOT_HEAD, INVSLOT_NECK, INVSLOT_SHOULDER, INVSLOT_BACK, INVSLOT_CHEST,
-	INVSLOT_WRIST, INVSLOT_HAND, INVSLOT_WAIST, INVSLOT_LEGS, INVSLOT_FEET,
+	INVSLOT_WRIST, INVSLOT_MAINHAND, INVSLOT_OFFHAND,
+	-- Right column
+	INVSLOT_HAND, INVSLOT_WAIST, INVSLOT_LEGS, INVSLOT_FEET,
 	INVSLOT_FINGER1, INVSLOT_FINGER2, INVSLOT_TRINKET1, INVSLOT_TRINKET2,
-	INVSLOT_MAINHAND, INVSLOT_OFFHAND, INVSLOT_RANGED,
+	INVSLOT_RANGED,
 }
 
 -- Ctrl+click an upgrade item shown in the /gw window (Instance Loot or the
