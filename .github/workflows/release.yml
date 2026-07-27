@@ -26,9 +26,21 @@ jobs:
             -exec cp -r {} build/GearWeights/ \;
           cd build && zip -r "../GearWeights-${{ steps.version.outputs.version }}.zip" GearWeights
 
+      - name: Extract changelog section for this version
+        run: |
+          touch release_notes.md
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="v${{ steps.version.outputs.version }}" '
+              $0 ~ "^## " ver "([^0-9.]|$)" { found=1; next }
+              /^## / { if (found) exit }
+              found { print }
+            ' CHANGELOG.md > release_notes.md
+          fi
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: GearWeights ${{ steps.version.outputs.version }}
+          body_path: release_notes.md
           files: GearWeights-${{ steps.version.outputs.version }}.zip
