@@ -1656,8 +1656,16 @@ local function CreateMainFrame()
 	local size = GearWeightsDB.frameSize
 	f:SetSize(size and size.width or 460, size and size.height or 440)
 	local pos = GearWeightsDB.framePosition
+	-- Always anchored via a fixed TOPLEFT point (absolute screen coordinates,
+	-- via GetLeft/GetTop rather than whatever point GetPoint() last reported)
+	-- so it's never anchored by the same corner the resize grip grows from
+	-- (BOTTOMRIGHT) - if a previous move or resize ever left the frame
+	-- anchored some other way (e.g. CENTER, or BOTTOMRIGHT after a resize),
+	-- starting a resize from that state could conflict with the anchor and
+	-- make the frame jump to its max size the instant you click the grip,
+	-- before you've moved the mouse at all.
 	if pos then
-		f:SetPoint(pos.point, UIParent, pos.relativePoint, pos.x, pos.y)
+		f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos.x, pos.y)
 	else
 		f:SetPoint("CENTER")
 	end
@@ -1667,8 +1675,10 @@ local function CreateMainFrame()
 	f:SetScript("OnDragStart", f.StartMoving)
 	f:SetScript("OnDragStop", function(self)
 		self:StopMovingOrSizing()
-		local point, _, relativePoint, x, y = self:GetPoint()
-		GearWeightsDB.framePosition = { point = point, relativePoint = relativePoint, x = x, y = y }
+		self:ClearAllPoints()
+		local left, top = self:GetLeft(), self:GetTop()
+		self:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+		GearWeightsDB.framePosition = { x = left, y = top }
 	end)
 	f:SetResizable(true)
 	f:SetMinResize(MIN_FRAME_WIDTH, MIN_FRAME_HEIGHT)
@@ -1692,6 +1702,10 @@ local function CreateMainFrame()
 	end)
 	sizer:SetScript("OnMouseUp", function()
 		f:StopMovingOrSizing()
+		f:ClearAllPoints()
+		local left, top = f:GetLeft(), f:GetTop()
+		f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+		GearWeightsDB.framePosition = { x = left, y = top }
 		GearWeightsDB.frameSize = { width = f:GetWidth(), height = f:GetHeight() }
 	end)
 
@@ -1927,8 +1941,10 @@ local function CreateMainFrame()
 		else
 			-- Its own row, below the View by Slot checkbox and above the scan
 			-- button (which - along with everything below it - is shifted
-			-- down to make room; see the anchor changes further down).
-			button:SetPoint("TOPLEFT", 0, -52)
+			-- down to make room; see the anchor changes further down). A
+			-- little extra breathing room above (-58 instead of -52) so the
+			-- row doesn't feel cramped against the checkbox above it.
+			button:SetPoint("TOPLEFT", 0, -58)
 		end
 
 		local lockIcon = button:CreateTexture(nil, "OVERLAY")
@@ -1950,6 +1966,12 @@ local function CreateMainFrame()
 		weaponBaselineButtons[box] = button
 		prevButton = button
 	end
+
+	local weaponBoxHint = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	weaponBoxHint:SetPoint("TOPLEFT", 0, -94)
+	weaponBoxHint:SetWidth(360)
+	weaponBoxHint:SetJustifyH("LEFT")
+	weaponBoxHint:SetText("Drag a weapon onto a box to set it as your reference (Two-Hand, Main-Hand, Off-Hand). Click a box to lock/unlock it - a locked box won't change when you re-equip.")
 
 	local function RefreshWeaponBaselineDisplay()
 		for _, box in ipairs(WEAPON_BOX_ORDER) do
@@ -2018,12 +2040,15 @@ local function CreateMainFrame()
 
 	RefreshWeaponBaselineDisplay()
 
+	dungeonRankViewMode = GW.IsViewBySlotEnabled() and "slot" or "zone"
+
 	local viewBySlotCheck = CreateFrame("CheckButton", nil, dungeonRankPanel, "UICheckButtonTemplate")
 	viewBySlotCheck:SetSize(18, 18)
 	viewBySlotCheck:SetPoint("TOPLEFT", 0, -24)
 	viewBySlotCheck:SetChecked(dungeonRankViewMode == "slot")
 	viewBySlotCheck:SetScript("OnClick", function(self)
 		dungeonRankViewMode = self:GetChecked() and "slot" or "zone"
+		GW.SetViewBySlotEnabled(dungeonRankViewMode == "slot")
 		RefreshDungeonRankPanel()
 	end)
 	local viewBySlotLabel = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -2035,7 +2060,7 @@ local function CreateMainFrame()
 	-- checkbox labels doesn't reliably fit once the window is resized narrow.
 	local dungeonRankRescan = CreateFrame("Button", nil, dungeonRankPanel, "UIPanelButtonTemplate")
 	dungeonRankRescan:SetSize(170, 20)
-	dungeonRankRescan:SetPoint("TOPLEFT", 0, -92)
+	dungeonRankRescan:SetPoint("TOPLEFT", 0, -145)
 	dungeonRankRescan:SetText("Scan All Dungeons/Raids")
 	dungeonRankRescan:SetScript("OnClick", function()
 		GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
@@ -2043,12 +2068,12 @@ local function CreateMainFrame()
 	end)
 
 	dungeonRankStatusText = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -118)
+	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -171)
 	dungeonRankStatusText:SetPoint("RIGHT", -2, 0)
 	dungeonRankStatusText:SetJustifyH("LEFT")
 
 	dungeonRankScrollFrame = CreateFrame("ScrollFrame", "GearWeightsDungeonRankScrollFrame", dungeonRankPanel, "UIPanelScrollFrameTemplate")
-	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -138)
+	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -191)
 	dungeonRankScrollFrame:SetPoint("BOTTOMRIGHT", -34, 2)
 
 	dungeonRankContent = CreateFrame("Frame", nil, dungeonRankScrollFrame)
