@@ -1664,7 +1664,15 @@ local function CreateMainFrame()
 	-- starting a resize from that state could conflict with the anchor and
 	-- make the frame jump to its max size the instant you click the grip,
 	-- before you've moved the mouse at all.
-	if pos then
+	--
+	-- pos.point is only ever present in the OLD saved format (point,
+	-- relativePoint, x, y - x/y were small offsets relative to whatever
+	-- point that was, often CENTER). Reusing those same numbers as absolute
+	-- BOTTOMLEFT-relative coordinates under the new scheme pushed the whole
+	-- window off the bottom of the screen - discard stale old-format data
+	-- and re-center once instead of trusting numbers that mean something
+	-- different now.
+	if pos and not pos.point then
 		f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos.x, pos.y)
 	else
 		f:SetPoint("CENTER")
@@ -2136,32 +2144,17 @@ local function CreateMainFrame()
 		"Target Loot - pin your current target's boss to the top",
 		GW.IsTargetLootEnabled, GW.SetTargetLootEnabled, RenderLootRows)
 
-	local glowHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	glowHeader:SetPoint("TOPLEFT", targetLootCheck, "BOTTOMLEFT", 0, -30)
-	glowHeader:SetText("Glow Effects")
-
-	local glowInstanceCheck = CreateSettingsCheckbox(glowHeader, -8,
-		"Glow boss/instance loot when it drops",
-		GW.IsInstanceGlowEnabled, GW.SetInstanceGlowEnabled)
-
-	local glowWorldCheck = CreateSettingsCheckbox(glowInstanceCheck, -24,
-		"Glow world drops that are upgrades",
-		GW.IsWorldDropGlowEnabled, GW.SetWorldDropGlowEnabled)
-
-	local glowQuestCheck = CreateSettingsCheckbox(glowWorldCheck, -24,
-		"Glow quest rewards that are upgrades",
-		GW.IsQuestRewardGlowEnabled, GW.SetQuestRewardGlowEnabled)
-
-	local glowQuestVendorCheck = CreateSettingsCheckbox(glowQuestCheck, -24,
-		"Glow highest-value quest reward when no choice is an upgrade",
-		GW.IsQuestVendorGlowEnabled, GW.SetQuestVendorGlowEnabled)
-
-	local glowVendorCheck = CreateSettingsCheckbox(glowQuestVendorCheck, -24,
-		"Glow vendor items that are upgrades",
-		GW.IsVendorGlowEnabled, GW.SetVendorGlowEnabled)
-
+	-- Glow Effects settings (instance/world/quest/quest-vendor/vendor) are
+	-- removed from this panel for now - none of them are working as
+	-- intended yet, and GW.EnsureLootSettings forces all five off in
+	-- SavedVariables regardless of prior state. The underlying glow
+	-- functions (GW.IsInstanceGlowEnabled, RefreshVendorGlows, etc. in
+	-- GearWeightsLoot.lua/GearWeightsUI.lua) are untouched and still wired
+	-- up - only these checkboxes and the settings they controlled are
+	-- disabled, so the feature can be picked back up later without
+	-- rebuilding it from scratch.
 	local lockedSlotsHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	lockedSlotsHeader:SetPoint("TOPLEFT", glowVendorCheck, "BOTTOMLEFT", 0, -30)
+	lockedSlotsHeader:SetPoint("TOPLEFT", targetLootCheck, "BOTTOMLEFT", 0, -30)
 	lockedSlotsHeader:SetText("Locked Slots")
 
 	local lockedSlotsHint = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")

@@ -487,28 +487,34 @@ local function EnsureLootSettings()
 	if GearWeightsDB.settings.glowWorldDrops == nil then
 		GearWeightsDB.settings.glowWorldDrops = false
 	end
-	-- One-time forced-off migration: these two defaulted to true before and
-	-- may already be true in existing SavedVariables - the glow effect isn't
-	-- working as intended yet, so turn it off now rather than waiting for it
-	-- to be manually unchecked. Gated so re-enabling it later (via the
-	-- Settings checkbox) sticks across future logins instead of being
-	-- silently reverted again.
-	if not GearWeightsDB.settings.lootGlowDisabledMigration then
+	if GearWeightsDB.settings.glowQuestRewards == nil then
+		GearWeightsDB.settings.glowQuestRewards = false
+	end
+	if GearWeightsDB.settings.glowQuestVendorValue == nil then
+		GearWeightsDB.settings.glowQuestVendorValue = false
+	end
+	if GearWeightsDB.settings.glowVendorItems == nil then
+		GearWeightsDB.settings.glowVendorItems = false
+	end
+	-- One-time forced-off migration: all five of these defaulted to true
+	-- before and may already be true in existing SavedVariables. The glow
+	-- effects aren't working as intended yet, so turn them all off now
+	-- (the Settings checkboxes for them are removed too - see
+	-- GearWeightsUI.lua) rather than leaving them silently active with no
+	-- way to toggle them off. The underlying glow code is untouched and
+	-- still there to pick back up later - only the settings values and the
+	-- UI to change them are disabled. Gated so this only forces the value
+	-- once; it won't fight a future re-enable once the toggles come back.
+	if not GearWeightsDB.settings.allGlowDisabledMigration then
 		GearWeightsDB.settings.glowInstanceLoot = false
 		GearWeightsDB.settings.glowWorldDrops = false
-		GearWeightsDB.settings.lootGlowDisabledMigration = true
+		GearWeightsDB.settings.glowQuestRewards = false
+		GearWeightsDB.settings.glowQuestVendorValue = false
+		GearWeightsDB.settings.glowVendorItems = false
+		GearWeightsDB.settings.allGlowDisabledMigration = true
 	end
 	if GearWeightsDB.settings.viewBySlot == nil then
 		GearWeightsDB.settings.viewBySlot = false
-	end
-	if GearWeightsDB.settings.glowQuestRewards == nil then
-		GearWeightsDB.settings.glowQuestRewards = true
-	end
-	if GearWeightsDB.settings.glowQuestVendorValue == nil then
-		GearWeightsDB.settings.glowQuestVendorValue = true
-	end
-	if GearWeightsDB.settings.glowVendorItems == nil then
-		GearWeightsDB.settings.glowVendorItems = true
 	end
 	if GearWeightsDB.settings.dungeonRankNormal == nil then
 		GearWeightsDB.settings.dungeonRankNormal = true
