@@ -2,6 +2,26 @@
 
 All notable changes to GearWeights are recorded here. Each new version gets its own section, newest first - add to this file as part of the work, not just at release time.
 
+Only the newest entry is left as a plain, always-visible `## vX.Y.Z` heading. When a new version is added, wrap the entry that was previously newest in a collapsed `<details><summary>vX.Y.Z - date</summary>` block (see the example below) - GitHub renders that as a collapsed, expandable section. Keep doing this one section at a time as new versions land, so the full history stays here without making the page long to scroll through.
+
+<!--
+Shape once a second version exists (placeholders only - avoid writing a
+real, literal "## vX.Y.Z" line in here: the release workflow greps for
+the first line matching the tagged version's heading, so a real-looking
+version number sitting inside this comment could get matched instead of
+the actual section further down):
+
+## v<NEWEST> - <date>
+(newest entry - stays fully visible, not wrapped)
+
+<details>
+<summary>v<PREVIOUS> - <date></summary>
+
+(previous entry's full body goes here, unchanged)
+
+</details>
+-->
+
 ## v1.26.11 - 2026-07-27
 
 First release since v1.17.1 - a lot has landed since then.
