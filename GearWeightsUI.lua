@@ -2317,16 +2317,37 @@ local function CreateMainFrame()
 			local check = CreateFrame("CheckButton", nil, settingsContent, "UICheckButtonTemplate")
 			check:SetSize(16, 16)
 			check:SetPoint("TOPLEFT", zoneFilterHint, "BOTTOMLEFT", startX, ZONE_ROWS_START_Y - (i - 1) * ZONE_ROW_HEIGHT)
-			check:SetChecked(not GW.IsZoneExcluded(zone.key))
-			check:SetScript("OnClick", function(self)
-				GW.SetZoneExcluded(zone.key, not (self:GetChecked() and true or false))
-				if RefreshDungeonRankPanel then RefreshDungeonRankPanel() end
-				GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
-			end)
 			local text = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 			text:SetPoint("LEFT", check, "RIGHT", 2, 0)
 			text:SetWordWrap(false)
 			text:SetText(zone.name)
+
+			if zone.available then
+				check:SetChecked(not GW.IsZoneExcluded(zone.key))
+				check:SetScript("OnClick", function(self)
+					GW.SetZoneExcluded(zone.key, not (self:GetChecked() and true or false))
+					if RefreshDungeonRankPanel then RefreshDungeonRankPanel() end
+					GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
+				end)
+			else
+				-- Known to AtlasLoot but not confirmed live on this server
+				-- yet (RAID_ZONE_NAME_WHITELIST, GearWeightsLoot.lua) -
+				-- listed so it's ready to enable later, but inert for now.
+				check:SetChecked(true)
+				check:Disable()
+				text:SetFontObject("GameFontDisableSmall")
+				local hitbox = CreateFrame("Frame", nil, settingsContent)
+				hitbox:SetPoint("TOPLEFT", check, "TOPLEFT", 0, 0)
+				hitbox:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 0, 0)
+				hitbox:EnableMouse(true)
+				hitbox:SetScript("OnEnter", function(self)
+					GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+					GameTooltip:AddLine("Not yet available", 1, 0.2, 0.2)
+					GameTooltip:AddLine(zone.name .. " isn't confirmed live on this server yet, so it's not tracked.", nil, nil, nil, true)
+					GameTooltip:Show()
+				end)
+				hitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+			end
 			zoneFilterChecks[zone.key] = check
 		end
 	end

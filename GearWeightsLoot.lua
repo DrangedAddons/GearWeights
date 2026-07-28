@@ -304,11 +304,17 @@ local TIER_SECTION_MATCH = { normal = "Normal", heroic = "Heroic", mythic = "Her
 local EXCLUDED_ZONE_KEYS = {
 	SharedDungeonLoot = true, T0 = true, ["T0.5"] = true,
 }
--- Which real raids are actually live on this custom server is unclear, so
--- raids are skipped entirely for now except World Bosses (open-world, not
--- tied to a specific raid instance's availability).
-local RAID_ZONE_KEY_WHITELIST = {
-	WorldBossesCLASSIC = true,
+-- Which real raids are actually live on this custom server, matched by zone
+-- NAME rather than AtlasLoot_Data's internal key - names are what's visible
+-- and confirmed from the in-game category menu, while guessing at AtlasLoot's
+-- own internal key naming risks getting it subtly wrong. Every other raid
+-- AtlasLoot knows about still shows up in the Settings tab's zone checklist
+-- (so it's ready to just enable once confirmed live), but stays excluded
+-- from the actual ranking scan and greyed out/disabled in the checklist
+-- until it's added here.
+local RAID_ZONE_NAME_WHITELIST = {
+	["World Bosses"] = true,
+	["Zul'Gurub"] = true,
 }
 -- Also Type=ClassicDungeonExt, but it's a vendor purchase list, not a
 -- dungeon - recategorized into its own "vendor" bucket instead.
@@ -319,8 +325,17 @@ local ZONE_CATEGORY_OVERRIDE = {
 local function ClassifyZoneCategory(key, data)
 	local category = DUNGEON_ZONE_TYPES[data.Type] and "dungeon" or (RAID_ZONE_TYPES[data.Type] and "raid" or nil)
 	category = ZONE_CATEGORY_OVERRIDE[key] or category
-	if category == "raid" and not RAID_ZONE_KEY_WHITELIST[key] then category = nil end
 	return category
+end
+
+-- Whether a zone actually participates in the ranking scan / is enabled in
+-- the Settings checklist, as opposed to just being known to AtlasLoot.
+-- Dungeons and the vendor bucket are always available; raids are gated by
+-- RAID_ZONE_NAME_WHITELIST since which ones are genuinely live here is
+-- otherwise unclear.
+local function IsZoneAvailable(category, name)
+	if category == "raid" then return RAID_ZONE_NAME_WHITELIST[name] == true end
+	return true
 end
 
 -- Matches AtlasLoot's own "Select Category" menu order (Raids, then
@@ -346,10 +361,11 @@ local ZONE_DISPLAY_ORDER_INDEX = { dungeon = {}, raid = {} }
 for i, name in ipairs(DUNGEON_ZONE_DISPLAY_ORDER) do ZONE_DISPLAY_ORDER_INDEX.dungeon[name] = i end
 for i, name in ipairs(RAID_ZONE_DISPLAY_ORDER) do ZONE_DISPLAY_ORDER_INDEX.raid[name] = i end
 
--- Every zone GW.BuildDungeonRankingList would ever consider (regardless of
--- current tier/zone-exclusion settings), for the Settings tab's zone
--- checklist to enumerate - sorted by category, then AtlasLoot's own menu
--- order within each category.
+-- Every dungeon/raid zone AtlasLoot knows about, for the Settings tab's
+-- zone checklist to enumerate - includes raids that aren't actually
+-- available yet (see IsZoneAvailable) so they can be listed greyed out
+-- rather than only appearing once they're confirmed live. Sorted by
+-- category, then AtlasLoot's own menu order within each category.
 function GW.GetTrackedZoneList()
 	EnsureAtlasLootModulesLoaded()
 	if not AtlasLoot_Data then return {} end
@@ -357,7 +373,7 @@ function GW.GetTrackedZoneList()
 	for key, data in pairs(AtlasLoot_Data) do
 		local category = ClassifyZoneCategory(key, data)
 		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] then
-			table.insert(zones, { key = key, name = data.Name, category = category })
+			table.insert(zones, { key = key, name = data.Name, category = category, available = IsZoneAvailable(category, data.Name) })
 		end
 	end
 	table.sort(zones, function(a, b)
@@ -416,7 +432,7 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 	local resultByKey = {}
 	for key, data in pairs(AtlasLoot_Data) do
 		local category = ClassifyZoneCategory(key, data)
-		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] and not GW.IsZoneExcluded(key) then
+		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] and IsZoneAvailable(category, data.Name) and not GW.IsZoneExcluded(key) then
 			table.insert(zones, { key = key, data = data, category = category })
 			resultByKey[key] = { zoneKey = key, zoneName = data.Name, category = category, normal = 0, heroic = 0, mythic = 0, total = 0, items = {} }
 		end
