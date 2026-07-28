@@ -451,6 +451,33 @@ local REPUTATION_ITEM_STANDING_OVERRIDE = {
 	["Bloodsail Pants"] = { standing = "Neutral", factionName = "Bloodsail Buccaneers" },
 	["Bloodsail Boots"] = { standing = "Neutral", factionName = "Bloodsail Buccaneers" },
 	["Bloodsail Admiral's Hat"] = { standing = "Friendly", factionName = "Bloodsail Buccaneers" },
+	-- Cenarion Circle (AQ War Effort) - these also require spending Combat/
+	-- Logistics/Tactical Badges alongside standing, but per the user we
+	-- ignore the badge cost entirely and treat standing as the only real
+	-- gate (same as ignoring a vendor's gold cost elsewhere). Tier grouping
+	-- confirmed by the user against AtlasLoot's own boss/section order -
+	-- includes "UnusedFist of Cenarius" deliberately: per the user, AtlasLoot
+	-- itself is the source of truth for what exists, so a leftover/unshipped
+	-- entry gets fixed on our end automatically whenever AtlasLoot removes
+	-- it, rather than us maintaining a second, divergent exclusion list.
+	["Earthweave Cloak"] = { standing = "Friendly", factionName = "Cenarion Circle" },
+	["Gloves of Earthen Power"] = { standing = "Friendly", factionName = "Cenarion Circle" },
+	["Band of Earthen Wrath"] = { standing = "Friendly", factionName = "Cenarion Circle" },
+	["Cenarion Combat Badge"] = { standing = "Friendly", factionName = "Cenarion Circle" },
+	["Cenarion Logistics Badge"] = { standing = "Friendly", factionName = "Cenarion Circle" },
+	["Cenarion Tactical Badge"] = { standing = "Friendly", factionName = "Cenarion Circle" },
+	["Mark of Cenarius"] = { standing = "Friendly", factionName = "Cenarion Circle" },
+	["Mark of Remulos"] = { standing = "Friendly", factionName = "Cenarion Circle" },
+	["Earthpower Vest"] = { standing = "Honored", factionName = "Cenarion Circle" },
+	["Band of Earthen Might"] = { standing = "Honored", factionName = "Cenarion Circle" },
+	["Grace of Earth"] = { standing = "Honored", factionName = "Cenarion Circle" },
+	["Rockfury Bracers"] = { standing = "Revered", factionName = "Cenarion Circle" },
+	["Deeprock Bracers"] = { standing = "Revered", factionName = "Cenarion Circle" },
+	["Might of Cenarius"] = { standing = "Revered", factionName = "Cenarion Circle" },
+	["Earthcalm Orb"] = { standing = "Revered", factionName = "Cenarion Circle" },
+	["Wrath of Cenarius"] = { standing = "Exalted", factionName = "Cenarion Circle" },
+	["Earthstrike"] = { standing = "Exalted", factionName = "Cenarion Circle" },
+	["UnusedFist of Cenarius"] = { standing = "Exalted", factionName = "Cenarion Circle" },
 }
 
 -- A handful of NPC reputation factions are exclusive to one player faction
