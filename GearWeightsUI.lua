@@ -2138,7 +2138,7 @@ local function CreateMainFrame()
 	settingsScrollFrame:SetPoint("BOTTOMRIGHT", -28, 4)
 
 	local settingsContent = CreateFrame("Frame", nil, settingsScrollFrame)
-	settingsContent:SetSize(400, 560)
+	settingsContent:SetSize(430, 900)
 	settingsScrollFrame:SetScrollChild(settingsContent)
 
 	local settingsHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -2264,6 +2264,77 @@ local function CreateMainFrame()
 		end
 		armorTypeChecks[armorType] = check
 	end
+
+	-- Included Dungeons & Raids - a per-zone whitelist for the out-of-instance
+	-- ranking scan (GW.BuildDungeonRankingList) specifically: which zones get
+	-- reported on at all, independent of the difficulty-tier checkboxes on
+	-- the Instance Loot tab (a zone can be ticked here but still filtered out
+	-- there by tier, or vice versa). All zones default to included. Dungeons
+	-- get their own 2 columns on the left, raids their own 2 on the right -
+	-- currently just "World Bosses" until more raids go live on this server
+	-- (see RAID_ZONE_KEY_WHITELIST, GearWeightsLoot.lua), but built to scale
+	-- as more get added rather than needing to be redone later.
+	local includedSlotsRows = math.ceil(#GW.LOCKABLE_SLOT_ORDER / 2)
+	local zoneFilterHeaderY = -20 - includedSlotsRows * LOCKED_SLOT_ROW_HEIGHT - 14
+
+	local zoneFilterHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	zoneFilterHeader:SetPoint("TOPLEFT", lockedSlotsHint, "BOTTOMLEFT", 0, zoneFilterHeaderY)
+	zoneFilterHeader:SetText("Included Dungeons & Raids")
+
+	local zoneFilterHint = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	zoneFilterHint:SetPoint("TOPLEFT", zoneFilterHeader, "BOTTOMLEFT", 0, -2)
+	zoneFilterHint:SetText("Checked zones are reported on by the out-of-instance ranking scan. Uncheck a zone to stop seeing it there - walking into it in person still shows its upgrades as normal.")
+	zoneFilterHint:SetWidth(400)
+	zoneFilterHint:SetJustifyH("LEFT")
+
+	local trackedZones = GW.GetTrackedZoneList()
+	local dungeonZones, raidZones = {}, {}
+	for _, zone in ipairs(trackedZones) do
+		if zone.category == "dungeon" then
+			table.insert(dungeonZones, zone)
+		elseif zone.category == "raid" then
+			table.insert(raidZones, zone)
+		end
+	end
+
+	local ZONE_RAID_START_X = 220
+	local ZONE_COL_WIDTH_DUNGEON = 105
+	local ZONE_COL_WIDTH_RAID = 95
+	local ZONE_ROW_HEIGHT = 20
+	local ZONE_ROWS_START_Y = -24
+
+	local dungeonZoneLabel = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	dungeonZoneLabel:SetPoint("TOPLEFT", zoneFilterHint, "BOTTOMLEFT", 0, -8)
+	dungeonZoneLabel:SetText("Dungeons")
+
+	local raidZoneLabel = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	raidZoneLabel:SetPoint("TOPLEFT", zoneFilterHint, "BOTTOMLEFT", ZONE_RAID_START_X, -8)
+	raidZoneLabel:SetText("Raids")
+
+	local zoneFilterChecks = {}
+	local function CreateZoneCheckColumn(zones, startX, colWidth)
+		for i, zone in ipairs(zones) do
+			local col = (i - 1) % 2
+			local row = math.floor((i - 1) / 2)
+			local check = CreateFrame("CheckButton", nil, settingsContent, "UICheckButtonTemplate")
+			check:SetSize(16, 16)
+			check:SetPoint("TOPLEFT", zoneFilterHint, "BOTTOMLEFT", startX + col * colWidth, ZONE_ROWS_START_Y - row * ZONE_ROW_HEIGHT)
+			check:SetChecked(not GW.IsZoneExcluded(zone.key))
+			check:SetScript("OnClick", function(self)
+				GW.SetZoneExcluded(zone.key, not (self:GetChecked() and true or false))
+				if RefreshDungeonRankPanel then RefreshDungeonRankPanel() end
+				GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
+			end)
+			local text = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			text:SetPoint("LEFT", check, "RIGHT", 2, 0)
+			text:SetWordWrap(false)
+			text:SetText(zone.name)
+			zoneFilterChecks[zone.key] = check
+		end
+	end
+
+	CreateZoneCheckColumn(dungeonZones, 0, ZONE_COL_WIDTH_DUNGEON)
+	CreateZoneCheckColumn(raidZones, ZONE_RAID_START_X, ZONE_COL_WIDTH_RAID)
 
 	return f
 end

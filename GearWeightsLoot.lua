@@ -316,6 +316,57 @@ local ZONE_CATEGORY_OVERRIDE = {
 	MarkOfTriumph = "vendor",
 }
 
+local function ClassifyZoneCategory(key, data)
+	local category = DUNGEON_ZONE_TYPES[data.Type] and "dungeon" or (RAID_ZONE_TYPES[data.Type] and "raid" or nil)
+	category = ZONE_CATEGORY_OVERRIDE[key] or category
+	if category == "raid" and not RAID_ZONE_KEY_WHITELIST[key] then category = nil end
+	return category
+end
+
+-- Every zone GW.BuildDungeonRankingList would ever consider (regardless of
+-- current tier/zone-exclusion settings), for the Settings tab's zone
+-- checklist to enumerate - sorted by category then name so the checklist
+-- reads alphabetically within Dungeons/Raids.
+function GW.GetTrackedZoneList()
+	EnsureAtlasLootModulesLoaded()
+	if not AtlasLoot_Data then return {} end
+	local zones = {}
+	for key, data in pairs(AtlasLoot_Data) do
+		local category = ClassifyZoneCategory(key, data)
+		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] then
+			table.insert(zones, { key = key, name = data.Name, category = category })
+		end
+	end
+	table.sort(zones, function(a, b)
+		if a.category ~= b.category then return a.category < b.category end
+		return a.name < b.name
+	end)
+	return zones
+end
+
+-- Whether a specific zone (Settings tab checklist) is excluded from the
+-- out-of-instance ranking scan entirely - a "should I bother going here"
+-- filter, separate from GW.IsSlotLocked/IsArmorTypeExcluded which affect
+-- whether an item counts as an upgrade anywhere it's evaluated (tooltips
+-- included). Zone exclusion only ever affects GW.BuildDungeonRankingList -
+-- walking into an excluded zone in person still shows its upgrades via
+-- GW.BuildInstanceLootList, same as always.
+function GW.IsZoneExcluded(zoneKey)
+	EnsureLootSettings()
+	GearWeightsDB.settings.excludedZones = GearWeightsDB.settings.excludedZones or {}
+	return GearWeightsDB.settings.excludedZones[zoneKey] == true
+end
+
+function GW.SetZoneExcluded(zoneKey, excluded)
+	EnsureLootSettings()
+	GearWeightsDB.settings.excludedZones = GearWeightsDB.settings.excludedZones or {}
+	if excluded then
+		GearWeightsDB.settings.excludedZones[zoneKey] = true
+	else
+		GearWeightsDB.settings.excludedZones[zoneKey] = nil
+	end
+end
+
 local RANKING_BATCH_SIZE = 20
 
 -- options: { dungeon = { normal = bool, heroic = bool, mythic = bool },
@@ -361,10 +412,8 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 	local zones = {}
 	local resultByKey = {}
 	for key, data in pairs(AtlasLoot_Data) do
-		local category = DUNGEON_ZONE_TYPES[data.Type] and "dungeon" or (RAID_ZONE_TYPES[data.Type] and "raid" or nil)
-		category = ZONE_CATEGORY_OVERRIDE[key] or category
-		if category == "raid" and not RAID_ZONE_KEY_WHITELIST[key] then category = nil end
-		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] then
+		local category = ClassifyZoneCategory(key, data)
+		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] and not GW.IsZoneExcluded(key) then
 			table.insert(zones, { key = key, data = data, category = category })
 			resultByKey[key] = { zoneKey = key, zoneName = data.Name, category = category, normal = 0, heroic = 0, mythic = 0, total = 0, items = {} }
 		end
