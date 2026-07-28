@@ -1581,6 +1581,84 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 				DEFAULT_CHAT_FRAME:AddMessage("GearWeights: no AtlasLoot_Data entries matched '" .. search .. "'.")
 			end
 		end
+	elseif strsub(msg, 1, 8) == "repcheck" then
+		-- Per-item breakdown for one tracked reputation faction: for every
+		-- item AtlasLoot lists there, shows what GW.GetItemReputationRequirement
+		-- found on its tooltip, whether that faction is one your character can
+		-- actually earn (GetFactionInfo), whether the standing tier is
+		-- currently ticked, and the final GW.GetBestUpgradeDiff verdict - so a
+		-- faction reporting zero/wrong upgrades can be diagnosed item by item
+		-- instead of guessed at.
+		local search = strtrim(strsub(msg, 9)):lower()
+		if search == "" then
+			DEFAULT_CHAT_FRAME:AddMessage("GearWeights: usage /gw repcheck <faction name search>, e.g. /gw repcheck argent dawn")
+		elseif not AtlasLoot_Data then
+			DEFAULT_CHAT_FRAME:AddMessage("GearWeights: AtlasLoot_Data not loaded yet.")
+		elseif not GW.REPUTATION_ZONE_LIST then
+			DEFAULT_CHAT_FRAME:AddMessage("GearWeights: GW.REPUTATION_ZONE_LIST not found.")
+		else
+			local matchedZone
+			for _, repZone in ipairs(GW.REPUTATION_ZONE_LIST) do
+				if strfind(repZone.name:lower(), search, 1, true) then
+					matchedZone = repZone
+					break
+				end
+			end
+			if not matchedZone then
+				DEFAULT_CHAT_FRAME:AddMessage("GearWeights: no tracked reputation faction matched '" .. search .. "'.")
+			else
+				local data = AtlasLoot_Data[matchedZone.key]
+				if not data then
+					DEFAULT_CHAT_FRAME:AddMessage("GearWeights: AtlasLoot_Data['" .. matchedZone.key .. "'] not found.")
+				else
+					local function IsFactionKnown(name)
+						for i = 1, GetNumFactions() do
+							local n, _, _, _, _, _, _, _, isHeader = GetFactionInfo(i)
+							if n == name and not isHeader then return true end
+						end
+						return false
+					end
+
+					DEFAULT_CHAT_FRAME:AddMessage("-- Reputation check: " .. matchedZone.name .. " (key=" .. matchedZone.key .. ") --")
+					local seen = {}
+					for _, boss in ipairs(data) do
+						for _, section in ipairs(boss) do
+							for _, entry in ipairs(section) do
+								if entry and entry.itemID then
+									local itemName, itemLink = GetItemInfo(entry.itemID)
+									if not itemLink then
+										DEFAULT_CHAT_FRAME:AddMessage(string.format("  [id %d] |cff888888not resolved (GetItemInfo nil - not cached yet)|r", entry.itemID))
+									elseif not seen[itemLink] then
+										seen[itemLink] = true
+										local factionName, standing = GW.GetItemReputationRequirement(itemLink)
+										if not factionName then
+											DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s |cffff4444no \"Requires X - Y\" line found|r", itemName))
+										else
+											local knownOk = IsFactionKnown(factionName)
+											local tierOk = GW.IsReputationTierEnabled and GW.IsReputationTierEnabled(standing)
+											local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
+											local verdict
+											if usable == false then
+												verdict = "|cffff4444not usable by your class|r"
+											elseif not diff then
+												verdict = "|cff888888no diff (nothing to compare against)|r"
+											elseif diff <= 0.05 then
+												verdict = string.format("|cff888888not an upgrade (%.1f)|r", diff)
+											else
+												verdict = string.format("|cff00ff00WOULD REPORT (+%.1f)|r", diff)
+											end
+											DEFAULT_CHAT_FRAME:AddMessage(string.format(
+												"  %s - Requires %s - %s | factionKnown=%s tierEnabled=%s | %s",
+												itemName, factionName, standing, tostring(knownOk), tostring(tierOk), verdict))
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
 	else
 		if GearWeightsUI_Toggle then GearWeightsUI_Toggle() end
 	end
