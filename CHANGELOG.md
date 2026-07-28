@@ -22,7 +22,22 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.11 - 2026-07-27
+## v1.26.22 - 2026-07-28
+
+### New: Included Slots / Armor Types / Included Dungeons & Raids (Settings tab)
+- "Locked Slots" renamed to "Included Slots" and flipped to a positive whitelist: every slot is checked (included) by default, and you uncheck a slot to stop counting upgrades there - reads as a positive confirmation instead of confirming a negative. Reordered into two columns matching the character pane's paperdoll layout.
+- Added an Armor Types filter (Plate/Mail/Leather/Cloth), same whitelist framing - uncheck a type to stop seeing its upgrades (e.g. a Plate wearer hiding spellpower Cloth suggestions). A type your class can't wear at all shows greyed out with a tooltip explaining why.
+- Added an Included Dungeons & Raids checklist - every zone the out-of-instance ranking scan would consider, whitelisted the same way. Sorted to match AtlasLoot's own category menu order. All 8 classic raids are listed; only World Bosses and Zul'Gurub are enabled today, the rest show greyed out until they're confirmed live on this server.
+
+### Dungeon/Raid Ranking Panel
+- Difficulty tiers (Normal/Heroic/Mythic) are now filtered independently for Dungeons vs. Raids, instead of one shared row - raids are typically a tier behind the equivalent dungeon difficulty in practice (you often move from Heroic/Mythic dungeons into Normal raids), so one filter didn't fit how progression actually works.
+
+### Fixes
+- Fixed the main window not appearing at all after an unrelated Settings change reinterpreted a saved window position under a different coordinate scheme.
+- Fixed a crash on `/gw` caused by a new Settings function being defined before a helper it depended on (a recurring Lua scoping gotcha in this codebase - see CLAUDE.md-adjacent notes if this bites again).
+
+<details>
+<summary>v1.26.11 - 2026-07-27</summary>
 
 First release since v1.17.1 - a lot has landed since then.
 
@@ -51,3 +66,5 @@ First release since v1.17.1 - a lot has landed since then.
 
 ### Other
 - Vendor and quest-reward item glow effects were added, then disabled for now (including their Settings toggles) - the underlying code is still there, just inactive until revisited.
+
+</details>
