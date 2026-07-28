@@ -310,7 +310,7 @@ local EXCLUDED_ZONE_KEYS = {
 -- dungeon-side ones above.
 local EXCLUDED_ZONE_NAMES = {
 	["AQ20 Class Sets"] = true,
-	["AQ40 Class Test (Tier 2.5)"] = true,
+	["AQ40 Class Sets (Tier 2.5)"] = true,
 	["Tier 1"] = true,
 	["Tier 2"] = true,
 	["Tier 3"] = true,
