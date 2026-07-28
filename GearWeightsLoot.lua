@@ -442,6 +442,15 @@ local REPUTATION_ITEM_STANDING_OVERRIDE = {
 	["Frostwolf Insignia Rank 4"] = { standing = "Revered", factionName = "Frostwolf Clan" },
 	["Frostwolf Insignia Rank 5"] = { standing = "Exalted", factionName = "Frostwolf Clan" },
 	["Frostwolf Insignia Rank 6"] = { standing = "Exalted", factionName = "Frostwolf Clan" },
+	-- Bloodsail Buccaneers costume set - also no tooltip line. Per the user,
+	-- 4 of the 5 pieces are 0-stat cosmetics (harmless either way - they'd
+	-- never register as an upgrade regardless) but the Admiral's Hat does
+	-- carry real stats, so it needs the standing hooked up to be evaluated.
+	["Bloodsail Shirt"] = { standing = "Neutral", factionName = "Bloodsail Buccaneers" },
+	["Bloodsail Sash"] = { standing = "Neutral", factionName = "Bloodsail Buccaneers" },
+	["Bloodsail Pants"] = { standing = "Neutral", factionName = "Bloodsail Buccaneers" },
+	["Bloodsail Boots"] = { standing = "Neutral", factionName = "Bloodsail Buccaneers" },
+	["Bloodsail Admiral's Hat"] = { standing = "Friendly", factionName = "Bloodsail Buccaneers" },
 }
 
 -- A handful of NPC reputation factions are exclusive to one player faction
