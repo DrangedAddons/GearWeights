@@ -664,10 +664,14 @@ local function SetDungeonRankRowAsItem(row, result)
 	local arrow = dungeonRankExpanded[result.zoneKey] and "[-]" or "[+]"
 	row.nameText:SetText("   " .. arrow .. " " .. categoryColor .. result.zoneName .. "|r")
 
+	-- Dungeon and raid tiers are filtered independently (see the two
+	-- checkbox rows above) - a raid zone's row must respect the Raids
+	-- checkboxes, not the Dungeons ones, and vice versa.
+	local isTierEnabled = (result.category == "raid") and GW.IsRaidRankTierEnabled or GW.IsDungeonRankTierEnabled
 	local parts = {}
-	if GW.IsDungeonRankTierEnabled("normal") then table.insert(parts, "N:" .. result.normal) end
-	if GW.IsDungeonRankTierEnabled("heroic") then table.insert(parts, "H:" .. result.heroic) end
-	if GW.IsDungeonRankTierEnabled("mythic") then table.insert(parts, "M:" .. result.mythic) end
+	if isTierEnabled("normal") then table.insert(parts, "N:" .. result.normal) end
+	if isTierEnabled("heroic") then table.insert(parts, "H:" .. result.heroic) end
+	if isTierEnabled("mythic") then table.insert(parts, "M:" .. result.mythic) end
 	row.countsText:SetText(table.concat(parts, "  ") .. string.format("  |cffffff00(%d total)|r", result.total))
 	row.priceIcon:Hide()
 	row.priceHitbox:Hide()
@@ -799,7 +803,8 @@ RefreshDungeonRankPanel = function()
 		dungeonRankPollFrame:Hide()
 		if not cached then
 			dungeonRankStatusText:SetText("No scan yet - click Scan All Dungeons/Raids below.")
-		elseif not (GW.IsDungeonRankTierEnabled("normal") or GW.IsDungeonRankTierEnabled("heroic") or GW.IsDungeonRankTierEnabled("mythic")) then
+		elseif not (GW.IsDungeonRankTierEnabled("normal") or GW.IsDungeonRankTierEnabled("heroic") or GW.IsDungeonRankTierEnabled("mythic")
+			or GW.IsRaidRankTierEnabled("normal") or GW.IsRaidRankTierEnabled("heroic") or GW.IsRaidRankTierEnabled("mythic")) then
 			dungeonRankStatusText:SetText("Tick at least one difficulty above to see results.")
 		else
 			local currentSpec = GW.GetCurrentSpecId and GW.GetCurrentSpecId()
@@ -1904,31 +1909,52 @@ local function CreateMainFrame()
 	dungeonRankPanel:SetPoint("BOTTOMRIGHT", lootPanel, "BOTTOMRIGHT", -18, 4)
 	dungeonRankPanel:Hide()
 
-	local tierChecks = {}
-	local function CreateTierCheck(tier, label, anchorTo)
-		local check = CreateFrame("CheckButton", nil, dungeonRankPanel, "UICheckButtonTemplate")
-		check:SetSize(18, 18)
-		if anchorTo then
-			check:SetPoint("LEFT", anchorTo, "RIGHT", 60, 0)
-		else
-			check:SetPoint("TOPLEFT", 2, -2)
+	-- Dungeon and raid tiers are filtered independently - you're typically
+	-- past Heroic/Mythic dungeons by the time Normal raids are relevant, so
+	-- one shared Normal/Heroic/Mythic row wouldn't fit how progression
+	-- actually works. Two rows, same 3 tiers each, backed by
+	-- GW.Is/SetDungeonRankTierEnabled and GW.Is/SetRaidRankTierEnabled
+	-- respectively.
+	local TIER_CHECK_FIRST_X = 62
+	local TIER_CHECK_SPACING = 60
+	local tierChecks = { dungeon = {}, raid = {} }
+	local function CreateTierCheckRow(category, categoryLabel, rowY, isFn, setFn)
+		local prevCheck
+		for _, tierInfo in ipairs({ { "normal", "Normal" }, { "heroic", "Heroic" }, { "mythic", "Mythic" } }) do
+			local tier, label = tierInfo[1], tierInfo[2]
+			local check = CreateFrame("CheckButton", nil, dungeonRankPanel, "UICheckButtonTemplate")
+			check:SetSize(18, 18)
+			if prevCheck then
+				check:SetPoint("LEFT", prevCheck, "RIGHT", TIER_CHECK_SPACING, 0)
+			else
+				check:SetPoint("TOPLEFT", TIER_CHECK_FIRST_X, rowY)
+			end
+			check:SetChecked(isFn(tier))
+			check:SetScript("OnClick", function(self)
+				setFn(tier, self:GetChecked() and true or false)
+				RefreshDungeonRankPanel()
+				GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
+			end)
+			local text = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			text:SetPoint("LEFT", check, "RIGHT", 2, 0)
+			text:SetText(label)
+			tierChecks[category][tier] = check
+			if not prevCheck then
+				-- Right-anchored to the first checkbox (vertically centered
+				-- against it via the LEFT/RIGHT anchor points) rather than a
+				-- fixed x position, so "Dungeons:" and "Raids:" both end up
+				-- flush against the same checkbox column regardless of their
+				-- own text width.
+				local categoryText = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+				categoryText:SetPoint("RIGHT", check, "LEFT", -4, 0)
+				categoryText:SetText(categoryLabel .. ":")
+			end
+			prevCheck = check
 		end
-		check:SetChecked(GW.IsDungeonRankTierEnabled(tier))
-		check:SetScript("OnClick", function(self)
-			GW.SetDungeonRankTierEnabled(tier, self:GetChecked() and true or false)
-			RefreshDungeonRankPanel()
-			GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
-		end)
-		local text = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
-		text:SetText(label)
-		tierChecks[tier] = check
-		return check
 	end
 
-	local normalCheck = CreateTierCheck("normal", "Normal")
-	local heroicCheck = CreateTierCheck("heroic", "Heroic", normalCheck)
-	CreateTierCheck("mythic", "Mythic", heroicCheck)
+	CreateTierCheckRow("dungeon", "Dungeons", -2, GW.IsDungeonRankTierEnabled, GW.SetDungeonRankTierEnabled)
+	CreateTierCheckRow("raid", "Raids", -24, GW.IsRaidRankTierEnabled, GW.SetRaidRankTierEnabled)
 
 	--------------------------------------------------------------------
 	-- Weapon baseline display - 3 independent slot icons (Two-Hand / Main
@@ -1952,9 +1978,9 @@ local function CreateMainFrame()
 			-- Its own row, below the View by Slot checkbox and above the scan
 			-- button (which - along with everything below it - is shifted
 			-- down to make room; see the anchor changes further down). A
-			-- little extra breathing room above (-58 instead of -52) so the
-			-- row doesn't feel cramped against the checkbox above it.
-			button:SetPoint("TOPLEFT", 0, -58)
+			-- little extra breathing room above so the row doesn't feel
+			-- cramped against the checkbox above it.
+			button:SetPoint("TOPLEFT", 0, -80)
 		end
 
 		local lockIcon = button:CreateTexture(nil, "OVERLAY")
@@ -1978,7 +2004,7 @@ local function CreateMainFrame()
 	end
 
 	local weaponBoxHint = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	weaponBoxHint:SetPoint("TOPLEFT", 0, -94)
+	weaponBoxHint:SetPoint("TOPLEFT", 0, -116)
 	weaponBoxHint:SetWidth(360)
 	weaponBoxHint:SetJustifyH("LEFT")
 	weaponBoxHint:SetText("Drag a weapon onto a box to set it as your reference (Two-Hand, Main-Hand, Off-Hand). Click a box to lock/unlock it - a locked box won't change when you re-equip.")
@@ -2054,7 +2080,7 @@ local function CreateMainFrame()
 
 	local viewBySlotCheck = CreateFrame("CheckButton", nil, dungeonRankPanel, "UICheckButtonTemplate")
 	viewBySlotCheck:SetSize(18, 18)
-	viewBySlotCheck:SetPoint("TOPLEFT", 0, -24)
+	viewBySlotCheck:SetPoint("TOPLEFT", 0, -46)
 	viewBySlotCheck:SetChecked(dungeonRankViewMode == "slot")
 	viewBySlotCheck:SetScript("OnClick", function(self)
 		dungeonRankViewMode = self:GetChecked() and "slot" or "zone"
@@ -2070,7 +2096,7 @@ local function CreateMainFrame()
 	-- checkbox labels doesn't reliably fit once the window is resized narrow.
 	local dungeonRankRescan = CreateFrame("Button", nil, dungeonRankPanel, "UIPanelButtonTemplate")
 	dungeonRankRescan:SetSize(170, 20)
-	dungeonRankRescan:SetPoint("TOPLEFT", 0, -145)
+	dungeonRankRescan:SetPoint("TOPLEFT", 0, -167)
 	dungeonRankRescan:SetText("Scan All Dungeons/Raids")
 	dungeonRankRescan:SetScript("OnClick", function()
 		GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
@@ -2078,12 +2104,12 @@ local function CreateMainFrame()
 	end)
 
 	dungeonRankStatusText = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -171)
+	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -193)
 	dungeonRankStatusText:SetPoint("RIGHT", -2, 0)
 	dungeonRankStatusText:SetJustifyH("LEFT")
 
 	dungeonRankScrollFrame = CreateFrame("ScrollFrame", "GearWeightsDungeonRankScrollFrame", dungeonRankPanel, "UIPanelScrollFrameTemplate")
-	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -191)
+	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -213)
 	dungeonRankScrollFrame:SetPoint("BOTTOMRIGHT", -34, 2)
 
 	dungeonRankContent = CreateFrame("Frame", nil, dungeonRankScrollFrame)

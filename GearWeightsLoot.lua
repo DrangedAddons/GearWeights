@@ -318,7 +318,12 @@ local ZONE_CATEGORY_OVERRIDE = {
 
 local RANKING_BATCH_SIZE = 20
 
--- options: { normal = bool, heroic = bool, mythic = bool }
+-- options: { dungeon = { normal = bool, heroic = bool, mythic = bool },
+--            raid = { normal = bool, heroic = bool, mythic = bool } }
+-- Dungeon and raid tiers are filtered independently - raids are typically a
+-- tier below the equivalent dungeon difficulty in practice, so someone who's
+-- moved past Heroic/Mythic dungeons into Normal raids wants both filters set
+-- differently rather than one Normal/Heroic/Mythic toggle applying to both.
 -- onProgress(processedCount, totalCount) - called periodically during the scan.
 -- onComplete(results) - results: array of
 --   { zoneKey, zoneName, category = "dungeon"/"raid", normal=N, heroic=N, mythic=N, total=N,
@@ -332,10 +337,26 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 		return
 	end
 
-	local tiers = {}
-	if options.normal then table.insert(tiers, "normal") end
-	if options.heroic then table.insert(tiers, "heroic") end
-	if options.mythic then table.insert(tiers, "mythic") end
+	local dungeonTiers = {}
+	if options.dungeon.normal then table.insert(dungeonTiers, "normal") end
+	if options.dungeon.heroic then table.insert(dungeonTiers, "heroic") end
+	if options.dungeon.mythic then table.insert(dungeonTiers, "mythic") end
+
+	local raidTiers = {}
+	if options.raid.normal then table.insert(raidTiers, "normal") end
+	if options.raid.heroic then table.insert(raidTiers, "heroic") end
+	if options.raid.mythic then table.insert(raidTiers, "mythic") end
+
+	-- Anything that's neither dungeon nor raid (currently just the vendor
+	-- bucket, ZONE_CATEGORY_OVERRIDE) isn't gated by either filter at all -
+	-- always scan every tier for it, since vendor stock isn't tied to
+	-- dungeon/raid difficulty preferences.
+	local ALL_TIERS = { "normal", "heroic", "mythic" }
+	local function TiersForCategory(category)
+		if category == "dungeon" then return dungeonTiers end
+		if category == "raid" then return raidTiers end
+		return ALL_TIERS
+	end
 
 	local zones = {}
 	local resultByKey = {}
@@ -354,7 +375,7 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 	-- larger scale - each individual unit of work is exactly as cheap either way.
 	local workQueue = {}
 	for _, zone in ipairs(zones) do
-		for _, tier in ipairs(tiers) do
+		for _, tier in ipairs(TiersForCategory(zone.category)) do
 			local sectionMatchText = TIER_SECTION_MATCH[tier]
 			for bossIndex, boss in ipairs(zone.data) do
 				if boss.Name then
@@ -525,6 +546,19 @@ local function EnsureLootSettings()
 	if GearWeightsDB.settings.dungeonRankMythic == nil then
 		GearWeightsDB.settings.dungeonRankMythic = true
 	end
+	-- Raids are typically a tier below the equivalent dungeon difficulty in
+	-- practice (e.g. you outgear Heroic/Mythic dungeons before Normal raids),
+	-- so dungeon and raid tiers are tracked independently rather than one
+	-- shared Normal/Heroic/Mythic filter applying to both categories.
+	if GearWeightsDB.settings.raidRankNormal == nil then
+		GearWeightsDB.settings.raidRankNormal = true
+	end
+	if GearWeightsDB.settings.raidRankHeroic == nil then
+		GearWeightsDB.settings.raidRankHeroic = true
+	end
+	if GearWeightsDB.settings.raidRankMythic == nil then
+		GearWeightsDB.settings.raidRankMythic = true
+	end
 end
 
 function GW.IsDungeonRankTierEnabled(tier)
@@ -535,11 +569,27 @@ function GW.IsDungeonRankTierEnabled(tier)
 	return false
 end
 
+function GW.IsRaidRankTierEnabled(tier)
+	EnsureLootSettings()
+	if tier == "normal" then return GearWeightsDB.settings.raidRankNormal end
+	if tier == "heroic" then return GearWeightsDB.settings.raidRankHeroic end
+	if tier == "mythic" then return GearWeightsDB.settings.raidRankMythic end
+	return false
+end
+
 function GW.SetDungeonRankTierEnabled(tier, enabled)
 	EnsureLootSettings()
 	if tier == "normal" then GearWeightsDB.settings.dungeonRankNormal = enabled
 	elseif tier == "heroic" then GearWeightsDB.settings.dungeonRankHeroic = enabled
 	elseif tier == "mythic" then GearWeightsDB.settings.dungeonRankMythic = enabled
+	end
+end
+
+function GW.SetRaidRankTierEnabled(tier, enabled)
+	EnsureLootSettings()
+	if tier == "normal" then GearWeightsDB.settings.raidRankNormal = enabled
+	elseif tier == "heroic" then GearWeightsDB.settings.raidRankHeroic = enabled
+	elseif tier == "mythic" then GearWeightsDB.settings.raidRankMythic = enabled
 	end
 end
 
@@ -950,9 +1000,16 @@ function GW.RunDungeonRankingScan(onComplete)
 	dungeonRankScanState.total = 0
 
 	local options = {
-		normal = GW.IsDungeonRankTierEnabled("normal"),
-		heroic = GW.IsDungeonRankTierEnabled("heroic"),
-		mythic = GW.IsDungeonRankTierEnabled("mythic"),
+		dungeon = {
+			normal = GW.IsDungeonRankTierEnabled("normal"),
+			heroic = GW.IsDungeonRankTierEnabled("heroic"),
+			mythic = GW.IsDungeonRankTierEnabled("mythic"),
+		},
+		raid = {
+			normal = GW.IsRaidRankTierEnabled("normal"),
+			heroic = GW.IsRaidRankTierEnabled("heroic"),
+			mythic = GW.IsRaidRankTierEnabled("mythic"),
+		},
 	}
 	GW.BuildDungeonRankingList(options, function(processed, total)
 		dungeonRankScanState.processed = processed
