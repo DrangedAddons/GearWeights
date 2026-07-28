@@ -1529,12 +1529,13 @@ end)
 -- Clicking Greed on a Bind-on-Pickup loot roll normally pops up a "this item
 -- will bind to you, are you sure?" confirmation (Blizzard's own
 -- CONFIRM_LOOT_ROLL StaticPopup) before the roll actually goes through.
--- Auto-confirm it for Greed specifically - Need rolls still prompt
--- normally, since those are the more consequential choice.
+-- Skips it for Greed specifically when the Settings checkbox is unticked -
+-- Need rolls still prompt normally either way, since those are the more
+-- consequential choice.
 local greedConfirmFrame = CreateFrame("Frame")
 greedConfirmFrame:RegisterEvent("CONFIRM_LOOT_ROLL")
 greedConfirmFrame:SetScript("OnEvent", function(self, event, rollId, rollType)
-	if not GW.IsAutoConfirmGreedEnabled() then return end
+	if GW.IsGreedBindPromptEnabled() then return end
 	if rollType == LOOT_ROLL_TYPE_GREED then
 		ConfirmLootRoll(rollId, rollType)
 		StaticPopup_Hide("CONFIRM_LOOT_ROLL")
@@ -2191,9 +2192,9 @@ local function CreateMainFrame()
 		"Target Loot - pin your current target's boss to the top",
 		GW.IsTargetLootEnabled, GW.SetTargetLootEnabled, RenderLootRows)
 
-	local autoConfirmGreedCheck = CreateSettingsCheckbox(targetLootCheck, -24,
-		"Auto-confirm Greed rolls on Bind-on-Pickup items",
-		GW.IsAutoConfirmGreedEnabled, GW.SetAutoConfirmGreedEnabled)
+	local promptGreedBindCheck = CreateSettingsCheckbox(targetLootCheck, -24,
+		"Prompt to accept BoP when Greed looting",
+		GW.IsGreedBindPromptEnabled, GW.SetGreedBindPromptEnabled)
 
 	-- Glow Effects settings (instance/world/quest/quest-vendor/vendor) are
 	-- removed from this panel for now - none of them are working as
@@ -2205,7 +2206,7 @@ local function CreateMainFrame()
 	-- disabled, so the feature can be picked back up later without
 	-- rebuilding it from scratch.
 	local lockedSlotsHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	lockedSlotsHeader:SetPoint("TOPLEFT", autoConfirmGreedCheck, "BOTTOMLEFT", 0, -30)
+	lockedSlotsHeader:SetPoint("TOPLEFT", promptGreedBindCheck, "BOTTOMLEFT", 0, -30)
 	lockedSlotsHeader:SetText("Included Slots")
 
 	local lockedSlotsHint = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")

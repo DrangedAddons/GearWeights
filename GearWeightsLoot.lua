@@ -588,8 +588,8 @@ local function EnsureLootSettings()
 	if GearWeightsDB.settings.targetLootEnabled == nil then
 		GearWeightsDB.settings.targetLootEnabled = true
 	end
-	if GearWeightsDB.settings.autoConfirmGreedRoll == nil then
-		GearWeightsDB.settings.autoConfirmGreedRoll = true
+	if GearWeightsDB.settings.promptGreedBindConfirm == nil then
+		GearWeightsDB.settings.promptGreedBindConfirm = true
 	end
 	if GearWeightsDB.settings.glowInstanceLoot == nil then
 		GearWeightsDB.settings.glowInstanceLoot = false
@@ -783,15 +783,18 @@ end
 
 -- Whether clicking Greed on a Bind-on-Pickup loot roll should auto-confirm
 -- the "this item will bind to you" popup instead of making you click
--- through it manually. Need rolls are untouched - only Greed.
-function GW.IsAutoConfirmGreedEnabled()
+-- through it manually. Need rolls are untouched - only Greed. Positive/
+-- whitelist framing, same as Included Slots/Armor Types: checked (the
+-- default) means the prompt still shows, matching normal WoW behavior -
+-- unchecking it is what turns on the auto-accept shortcut.
+function GW.IsGreedBindPromptEnabled()
 	EnsureLootSettings()
-	return GearWeightsDB.settings.autoConfirmGreedRoll
+	return GearWeightsDB.settings.promptGreedBindConfirm
 end
 
-function GW.SetAutoConfirmGreedEnabled(enabled)
+function GW.SetGreedBindPromptEnabled(enabled)
 	EnsureLootSettings()
-	GearWeightsDB.settings.autoConfirmGreedRoll = enabled
+	GearWeightsDB.settings.promptGreedBindConfirm = enabled
 end
 
 --------------------------------------------------------------------------------
