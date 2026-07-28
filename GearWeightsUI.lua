@@ -1579,10 +1579,17 @@ end)
 local greedConfirmFrame = CreateFrame("Frame")
 greedConfirmFrame:RegisterEvent("CONFIRM_LOOT_ROLL")
 greedConfirmFrame:SetScript("OnEvent", function(self, event, rollId, rollType)
+	-- TEMPORARY diagnostic - remove once the bypass is confirmed working.
+	DEFAULT_CHAT_FRAME:AddMessage(string.format(
+		"GearWeights DEBUG: CONFIRM_LOOT_ROLL rollId=%s rollType=%s LOOT_ROLL_TYPE_GREED=%s promptEnabled=%s",
+		tostring(rollId), tostring(rollType), tostring(LOOT_ROLL_TYPE_GREED), tostring(GW.IsGreedBindPromptEnabled())))
 	if GW.IsGreedBindPromptEnabled() then return end
 	if rollType == LOOT_ROLL_TYPE_GREED then
+		DEFAULT_CHAT_FRAME:AddMessage("GearWeights DEBUG: calling ConfirmLootRoll and hiding popup")
 		ConfirmLootRoll(rollId, rollType)
 		StaticPopup_Hide("CONFIRM_LOOT_ROLL")
+	else
+		DEFAULT_CHAT_FRAME:AddMessage("GearWeights DEBUG: rollType didn't match LOOT_ROLL_TYPE_GREED, leaving popup alone")
 	end
 end)
 
