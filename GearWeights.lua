@@ -1611,14 +1611,6 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 				if not data then
 					DEFAULT_CHAT_FRAME:AddMessage("GearWeights: AtlasLoot_Data['" .. matchedZone.key .. "'] not found.")
 				else
-					local function IsFactionKnown(name)
-						for i = 1, GetNumFactions() do
-							local n, _, _, _, _, _, _, _, isHeader = GetFactionInfo(i)
-							if n == name and not isHeader then return true end
-						end
-						return false
-					end
-
 					DEFAULT_CHAT_FRAME:AddMessage("-- Reputation check: " .. matchedZone.name .. " (key=" .. matchedZone.key .. ") --")
 					if matchedZone.available == false then
 						DEFAULT_CHAT_FRAME:AddMessage("  |cffff4444Note: this faction is marked unavailable (not confirmed live on this server yet) and is greyed out/excluded from the real scan regardless of the verdicts below.|r")
@@ -1637,27 +1629,30 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 											DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s |cff888888excluded (quest-reward item, not reputation-gated)|r", itemName))
 										else
 											local factionName, standing = GW.GetItemReputationRequirement(itemLink)
-											local knownOk, source
-											if factionName and standing then
-												knownOk = IsFactionKnown(factionName)
-												source = "tooltip"
-											else
+											local source = "tooltip"
+											if not standing then
 												local override = GW.GetReputationItemOverride and GW.GetReputationItemOverride(itemName)
 												if override then
 													standing = override.standing
 													factionName = override.factionName
-													knownOk = (UnitFactionGroup("player") == override.playerFaction)
 													source = "override"
 												end
 											end
 											if not standing then
 												DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s |cffff4444no \"Requires X - Y\" line found|r", itemName))
 											else
+												-- Deliberately NOT checking whether this faction is
+												-- currently in the reputation pane - most classic reps
+												-- stay hidden until an unlock quest is done, and the
+												-- goal is to surface "worth going to earn" upgrades
+												-- even before that. Only a genuine Alliance/Horde
+												-- side-lock excludes an item.
+												local reachableOk = GW.IsReputationFactionReachable and GW.IsReputationFactionReachable(factionName)
 												local tierOk = GW.IsReputationTierEnabled and GW.IsReputationTierEnabled(standing)
 												local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
 												local verdict
-												if not knownOk then
-													verdict = source == "override" and "|cff888888wrong Alliance/Horde side|r" or "|cff888888faction not known by this character|r"
+												if not reachableOk then
+													verdict = "|cff888888wrong Alliance/Horde side|r"
 												elseif not tierOk then
 													verdict = "|cff888888standing tier disabled in settings|r"
 												elseif usable == false then
@@ -1670,8 +1665,8 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 													verdict = string.format("|cff00ff00WOULD REPORT (+%.1f)|r", diff)
 												end
 												DEFAULT_CHAT_FRAME:AddMessage(string.format(
-													"  %s - Requires %s - %s (%s) | factionKnown=%s tierEnabled=%s | %s",
-													itemName, factionName, standing, source, tostring(knownOk), tostring(tierOk), verdict))
+													"  %s - Requires %s - %s (%s) | reachable=%s tierEnabled=%s | %s",
+													itemName, factionName, standing, source, tostring(reachableOk), tostring(tierOk), verdict))
 											end
 										end
 									end

@@ -426,24 +426,45 @@ GW.REPUTATION_STANDING_ORDER = { "Neutral", "Friendly", "Honored", "Revered", "E
 -- reference table (Rank 1 Neutral/quest-only, Rank 2 Friendly/3000,
 -- Rank 3 Honored/6000, Rank 4 Revered/9000, Rank 5 Exalted/21000, Rank 6
 -- also Exalted/costs additional rep - no separate tier needed for it).
--- playerFaction is the character's own Alliance/Horde side (UnitFactionGroup),
--- NOT an NPC reputation name - Stormpike Guard is Alliance-only, Frostwolf
--- Clan is Horde-only, and both share the single "AlteracFactions" AtlasLoot
--- key, so this is what actually separates them instead of GetFactionInfo.
+-- factionName here is the actual Stormpike Guard/Frostwolf Clan NPC
+-- reputation - side-exclusivity (Alliance/Horde) is resolved uniformly for
+-- both this and the tooltip path via REPUTATION_FACTION_SIDE_LOCK below.
 local REPUTATION_ITEM_STANDING_OVERRIDE = {
-	["Stormpike Insignia Rank 1"] = { standing = "Neutral", playerFaction = "Alliance", factionName = "Stormpike Guard" },
-	["Stormpike Insignia Rank 2"] = { standing = "Friendly", playerFaction = "Alliance", factionName = "Stormpike Guard" },
-	["Stormpike Insignia Rank 3"] = { standing = "Honored", playerFaction = "Alliance", factionName = "Stormpike Guard" },
-	["Stormpike Insignia Rank 4"] = { standing = "Revered", playerFaction = "Alliance", factionName = "Stormpike Guard" },
-	["Stormpike Insignia Rank 5"] = { standing = "Exalted", playerFaction = "Alliance", factionName = "Stormpike Guard" },
-	["Stormpike Insignia Rank 6"] = { standing = "Exalted", playerFaction = "Alliance", factionName = "Stormpike Guard" },
-	["Frostwolf Insignia Rank 1"] = { standing = "Neutral", playerFaction = "Horde", factionName = "Frostwolf Clan" },
-	["Frostwolf Insignia Rank 2"] = { standing = "Friendly", playerFaction = "Horde", factionName = "Frostwolf Clan" },
-	["Frostwolf Insignia Rank 3"] = { standing = "Honored", playerFaction = "Horde", factionName = "Frostwolf Clan" },
-	["Frostwolf Insignia Rank 4"] = { standing = "Revered", playerFaction = "Horde", factionName = "Frostwolf Clan" },
-	["Frostwolf Insignia Rank 5"] = { standing = "Exalted", playerFaction = "Horde", factionName = "Frostwolf Clan" },
-	["Frostwolf Insignia Rank 6"] = { standing = "Exalted", playerFaction = "Horde", factionName = "Frostwolf Clan" },
+	["Stormpike Insignia Rank 1"] = { standing = "Neutral", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 2"] = { standing = "Friendly", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 3"] = { standing = "Honored", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 4"] = { standing = "Revered", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 5"] = { standing = "Exalted", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 6"] = { standing = "Exalted", factionName = "Stormpike Guard" },
+	["Frostwolf Insignia Rank 1"] = { standing = "Neutral", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 2"] = { standing = "Friendly", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 3"] = { standing = "Honored", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 4"] = { standing = "Revered", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 5"] = { standing = "Exalted", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 6"] = { standing = "Exalted", factionName = "Frostwolf Clan" },
 }
+
+-- A handful of NPC reputation factions are exclusive to one player faction
+-- (Alliance/Horde) rather than neutral/dual-faction like the rest of the
+-- classic reputation list. Checked against the character's own side
+-- (UnitFactionGroup), NOT GetFactionInfo/the reputation pane - most classic
+-- reps (Timbermaw Hold, Zandalar Tribe, etc.) are hidden from the pane until
+-- an unlock quest is done, but the user still wants them listed as "worth
+-- going to earn" upgrades even before that quest is done, so pane-visibility
+-- can't be the gate. Anything not listed here is assumed reachable by both
+-- sides; add to this table if another faction turns out to be side-locked.
+local REPUTATION_FACTION_SIDE_LOCK = {
+	["Stormpike Guard"] = "Alliance",
+	["Frostwolf Clan"] = "Horde",
+}
+
+function GW.IsReputationFactionReachable(factionName)
+	local sideLock = factionName and REPUTATION_FACTION_SIDE_LOCK[factionName]
+	if sideLock then
+		return UnitFactionGroup("player") == sideLock
+	end
+	return true
+end
 
 -- Quest-chain reward weapons bundled under the same "AlteracFactions"
 -- AtlasLoot key (one quest, pick one of four) - not reputation-gated at all,
@@ -637,22 +658,6 @@ end
 -- (tooltip scan) determines its real faction + standing after the fact.
 --------------------------------------------------------------------------------
 
--- Every faction reputation known to the player's own character (their
--- actual reputation pane, via the client's own API - already filtered to
--- what that character's faction/starting choices can ever interact with),
--- so a reputation-gated item for a faction this character could never earn
--- (e.g. an Alliance-only reputation on a Horde character) isn't reported as
--- a real upgrade opportunity - same idea as GW.IsItemUsable excluding gear
--- a class has no proficiency for.
-local function GetKnownFactionNames()
-	local known = {}
-	for i = 1, GetNumFactions() do
-		local name, _, _, _, _, _, _, _, isHeader = GetFactionInfo(i)
-		if name and not isHeader then known[name] = true end
-	end
-	return known
-end
-
 -- onProgress(processedCount, totalCount) - called periodically during the scan.
 -- onComplete(results) - results: array of
 --   { zoneKey, zoneName, category = "reputation", Friendly=N, Honored=N, Revered=N, Exalted=N,
@@ -664,8 +669,6 @@ function GW.BuildReputationRankingList(onProgress, onComplete)
 		onComplete({})
 		return
 	end
-
-	local knownFactions = GetKnownFactionNames()
 
 	local workQueue = {}
 	local resultByKey = {}
@@ -709,10 +712,7 @@ function GW.BuildReputationRankingList(onProgress, onComplete)
 				if not zoneSeen[itemLink] and not GW.IsReputationItemExcluded(itemName) then
 					zoneSeen[itemLink] = true
 					local factionName, standing = GW.GetItemReputationRequirement(itemLink)
-					local reachable
-					if factionName and standing then
-						reachable = knownFactions[factionName] == true
-					else
+					if not standing then
 						-- No tooltip "Requires X - Y" line (e.g. Alterac
 						-- Valley's Insignia rank rewards, earned via quest
 						-- chain rather than an item use-requirement) - fall
@@ -721,10 +721,17 @@ function GW.BuildReputationRankingList(onProgress, onComplete)
 						if override then
 							standing = override.standing
 							factionName = override.factionName
-							reachable = (UnitFactionGroup("player") == override.playerFaction)
 						end
 					end
-					if standing and reachable and GW.IsReputationTierEnabled(standing) then
+					-- Deliberately NOT gated by whether this faction is
+					-- currently visible in the player's own reputation pane -
+					-- most classic reps (Timbermaw Hold, Zandalar Tribe, etc.)
+					-- stay hidden until an unlock quest is done, but the goal
+					-- here is to surface "worth going to earn" upgrades even
+					-- before that quest is done. Only a genuine Alliance/Horde
+					-- side-lock (GW.IsReputationFactionReachable) excludes an
+					-- item outright.
+					if standing and GW.IsReputationFactionReachable(factionName) and GW.IsReputationTierEnabled(standing) then
 						local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
 						if usable ~= false and diff and diff > 0.05 then
 							local result = resultByKey[work.zoneKey]
