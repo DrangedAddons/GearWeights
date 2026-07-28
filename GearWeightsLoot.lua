@@ -304,6 +304,18 @@ local TIER_SECTION_MATCH = { normal = "Normal", heroic = "Heroic", mythic = "Her
 local EXCLUDED_ZONE_KEYS = {
 	SharedDungeonLoot = true, T0 = true, ["T0.5"] = true,
 }
+-- Same idea, but AtlasLoot's raid-side tier/class-set reference pages
+-- (AQ20/AQ40/ZG set browsers, Tier 1/2/3) - matched by name rather than key
+-- since their actual AtlasLoot_Data keys weren't confirmed, unlike the
+-- dungeon-side ones above.
+local EXCLUDED_ZONE_NAMES = {
+	["AQ20 Class Sets"] = true,
+	["AQ40 Class Test (Tier 2.5)"] = true,
+	["Tier 1"] = true,
+	["Tier 2"] = true,
+	["Tier 3"] = true,
+	["Zul'Gurub Sets"] = true,
+}
 -- Which real raids are actually live on this custom server, matched by zone
 -- NAME rather than AtlasLoot_Data's internal key - names are what's visible
 -- and confirmed from the in-game category menu, while guessing at AtlasLoot's
@@ -372,7 +384,7 @@ function GW.GetTrackedZoneList()
 	local zones = {}
 	for key, data in pairs(AtlasLoot_Data) do
 		local category = ClassifyZoneCategory(key, data)
-		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] then
+		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] and not EXCLUDED_ZONE_NAMES[data.Name] then
 			table.insert(zones, { key = key, name = data.Name, category = category, available = IsZoneAvailable(category, data.Name) })
 		end
 	end
@@ -432,7 +444,7 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 	local resultByKey = {}
 	for key, data in pairs(AtlasLoot_Data) do
 		local category = ClassifyZoneCategory(key, data)
-		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] and IsZoneAvailable(category, data.Name) and not GW.IsZoneExcluded(key) then
+		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] and not EXCLUDED_ZONE_NAMES[data.Name] and IsZoneAvailable(category, data.Name) and not GW.IsZoneExcluded(key) then
 			table.insert(zones, { key = key, data = data, category = category })
 			resultByKey[key] = { zoneKey = key, zoneName = data.Name, category = category, normal = 0, heroic = 0, mythic = 0, total = 0, items = {} }
 		end
