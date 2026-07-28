@@ -1481,6 +1481,49 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 				end
 			end
 		end
+	elseif strsub(msg, 1, 7) == "repdiag" then
+		-- Diagnostic for the planned Reputations category: dumps AtlasLoot_Data's
+		-- real structure for whatever zone name matches, so we can see how
+		-- Friendly/Honored/Revered/Exalted are actually encoded (mode headers,
+		-- like Normal/Heroic Mode already are for dungeons, or something else)
+		-- before building the real feature on top of a guess.
+		local search = strtrim(strsub(msg, 8)):lower()
+		if search == "" then
+			DEFAULT_CHAT_FRAME:AddMessage("GearWeights: usage /gw repdiag <name search>, e.g. /gw repdiag argent")
+		elseif not AtlasLoot_Data then
+			DEFAULT_CHAT_FRAME:AddMessage("GearWeights: AtlasLoot_Data not loaded yet.")
+		else
+			local matches = 0
+			for key, data in pairs(AtlasLoot_Data) do
+				local name = data.Name
+				if type(name) == "string" and strfind(name:lower(), search, 1, true) then
+					matches = matches + 1
+					DEFAULT_CHAT_FRAME:AddMessage(string.format("-- key=%s Name=%s Type=%s Side=%s #entries=%d --",
+						tostring(key), tostring(name), tostring(data.Type), tostring(data.Side), #data))
+					for i, boss in ipairs(data) do
+						if i > 3 then
+							DEFAULT_CHAT_FRAME:AddMessage("  ... (" .. (#data - 3) .. " more, truncated)")
+							break
+						end
+						DEFAULT_CHAT_FRAME:AddMessage(string.format("  [%d] boss.Name=%s #sections=%d", i, tostring(boss.Name), #boss))
+						for si, section in ipairs(boss) do
+							if si > 3 then
+								DEFAULT_CHAT_FRAME:AddMessage("    ... (more sections truncated)")
+								break
+							end
+							local first = section[1]
+							local isHeader = first ~= nil and first.name ~= nil and first.itemID == nil
+							DEFAULT_CHAT_FRAME:AddMessage(string.format(
+								"    section %d: #items=%d firstEntry.name=%s firstEntry.itemID=%s isModeHeader=%s",
+								si, #section, tostring(first and first.name), tostring(first and first.itemID), tostring(isHeader)))
+						end
+					end
+				end
+			end
+			if matches == 0 then
+				DEFAULT_CHAT_FRAME:AddMessage("GearWeights: no AtlasLoot_Data entries matched '" .. search .. "'.")
+			end
+		end
 	else
 		if GearWeightsUI_Toggle then GearWeightsUI_Toggle() end
 	end
