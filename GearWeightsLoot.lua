@@ -412,7 +412,57 @@ GW.REPUTATION_ZONE_LIST = {
 }
 -- GW-namespaced (not a bare local) since GW.GetItemReputationRequirement in
 -- GearWeights.lua needs it too, and GearWeights.lua loads before this file.
-GW.REPUTATION_STANDING_ORDER = { "Friendly", "Honored", "Revered", "Exalted" }
+-- "Neutral" sits below Friendly for Alterac Valley's Rank 1 insignia, which
+-- only needs its intro quest done (no rep threshold at all) - see
+-- REPUTATION_ITEM_STANDING_OVERRIDE below.
+GW.REPUTATION_STANDING_ORDER = { "Neutral", "Friendly", "Honored", "Revered", "Exalted" }
+
+-- Some reputation "items" carry no tooltip "Requires X - Y" line at all -
+-- Alterac Valley's Stormpike/Frostwolf Insignia rank rewards are handed out
+-- by a quest chain (one quest per rank, gated by that side's own reputation
+-- behind the scenes) rather than by an item use-requirement, so
+-- GW.GetItemReputationRequirement has nothing to read off them. This
+-- hardcodes the known rank -> standing mapping instead, per the user's own
+-- reference table (Rank 1 Neutral/quest-only, Rank 2 Friendly/3000,
+-- Rank 3 Honored/6000, Rank 4 Revered/9000, Rank 5 Exalted/21000, Rank 6
+-- also Exalted/costs additional rep - no separate tier needed for it).
+-- playerFaction is the character's own Alliance/Horde side (UnitFactionGroup),
+-- NOT an NPC reputation name - Stormpike Guard is Alliance-only, Frostwolf
+-- Clan is Horde-only, and both share the single "AlteracFactions" AtlasLoot
+-- key, so this is what actually separates them instead of GetFactionInfo.
+local REPUTATION_ITEM_STANDING_OVERRIDE = {
+	["Stormpike Insignia Rank 1"] = { standing = "Neutral", playerFaction = "Alliance", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 2"] = { standing = "Friendly", playerFaction = "Alliance", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 3"] = { standing = "Honored", playerFaction = "Alliance", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 4"] = { standing = "Revered", playerFaction = "Alliance", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 5"] = { standing = "Exalted", playerFaction = "Alliance", factionName = "Stormpike Guard" },
+	["Stormpike Insignia Rank 6"] = { standing = "Exalted", playerFaction = "Alliance", factionName = "Stormpike Guard" },
+	["Frostwolf Insignia Rank 1"] = { standing = "Neutral", playerFaction = "Horde", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 2"] = { standing = "Friendly", playerFaction = "Horde", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 3"] = { standing = "Honored", playerFaction = "Horde", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 4"] = { standing = "Revered", playerFaction = "Horde", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 5"] = { standing = "Exalted", playerFaction = "Horde", factionName = "Frostwolf Clan" },
+	["Frostwolf Insignia Rank 6"] = { standing = "Exalted", playerFaction = "Horde", factionName = "Frostwolf Clan" },
+}
+
+-- Quest-chain reward weapons bundled under the same "AlteracFactions"
+-- AtlasLoot key (one quest, pick one of four) - not reputation-gated at all,
+-- so excluded from the Reputations category entirely rather than reported
+-- as a faction/standing upgrade.
+local REPUTATION_ITEM_EXCLUDE = {
+	["Cold Forged Hammer"] = true,
+	["Ice Barbed Spear"] = true,
+	["Wand of Biting Cold"] = true,
+	["Bloodseeker"] = true,
+}
+
+function GW.GetReputationItemOverride(itemName)
+	return itemName and REPUTATION_ITEM_STANDING_OVERRIDE[itemName]
+end
+
+function GW.IsReputationItemExcluded(itemName)
+	return itemName ~= nil and REPUTATION_ITEM_EXCLUDE[itemName] == true
+end
 
 local ZONE_DISPLAY_ORDER_INDEX = { dungeon = {}, raid = {} }
 for i, name in ipairs(DUNGEON_ZONE_DISPLAY_ORDER) do ZONE_DISPLAY_ORDER_INDEX.dungeon[name] = i end
@@ -624,7 +674,7 @@ function GW.BuildReputationRankingList(onProgress, onComplete)
 		if data and repZone.available ~= false and not GW.IsReputationFactionExcluded(repZone.key) then
 			resultByKey[repZone.key] = {
 				zoneKey = repZone.key, zoneName = repZone.name, category = "reputation",
-				Friendly = 0, Honored = 0, Revered = 0, Exalted = 0, total = 0, items = {},
+				Neutral = 0, Friendly = 0, Honored = 0, Revered = 0, Exalted = 0, total = 0, items = {},
 			}
 			for _, boss in ipairs(data) do
 				for _, section in ipairs(boss) do
@@ -649,17 +699,32 @@ function GW.BuildReputationRankingList(onProgress, onComplete)
 		local processed = 0
 		while i <= total and processed < RANKING_BATCH_SIZE do
 			local work = workQueue[i]
-			local itemLink = select(2, GetItemInfo(work.stockItemId))
+			local itemName, itemLink = GetItemInfo(work.stockItemId)
 			if itemLink then
 				local zoneSeen = seenItemsByZone[work.zoneKey]
 				if not zoneSeen then
 					zoneSeen = {}
 					seenItemsByZone[work.zoneKey] = zoneSeen
 				end
-				if not zoneSeen[itemLink] then
+				if not zoneSeen[itemLink] and not GW.IsReputationItemExcluded(itemName) then
 					zoneSeen[itemLink] = true
 					local factionName, standing = GW.GetItemReputationRequirement(itemLink)
-					if factionName and standing and knownFactions[factionName] and GW.IsReputationTierEnabled(standing) then
+					local reachable
+					if factionName and standing then
+						reachable = knownFactions[factionName] == true
+					else
+						-- No tooltip "Requires X - Y" line (e.g. Alterac
+						-- Valley's Insignia rank rewards, earned via quest
+						-- chain rather than an item use-requirement) - fall
+						-- back to the hardcoded rank/faction override.
+						local override = GW.GetReputationItemOverride(itemName)
+						if override then
+							standing = override.standing
+							factionName = override.factionName
+							reachable = (UnitFactionGroup("player") == override.playerFaction)
+						end
+					end
+					if standing and reachable and GW.IsReputationTierEnabled(standing) then
 						local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
 						if usable ~= false and diff and diff > 0.05 then
 							local result = resultByKey[work.zoneKey]
@@ -807,8 +872,11 @@ local function EnsureLootSettings()
 	if GearWeightsDB.settings.raidRankAscended == nil then
 		GearWeightsDB.settings.raidRankAscended = true
 	end
-	-- Reputation standing tiers (Friendly/Honored/Revered/Exalted) - same
-	-- whitelist framing as everything else, all included by default.
+	-- Reputation standing tiers (Neutral/Friendly/Honored/Revered/Exalted) -
+	-- same whitelist framing as everything else, all included by default.
+	if GearWeightsDB.settings.repRankNeutral == nil then
+		GearWeightsDB.settings.repRankNeutral = true
+	end
 	if GearWeightsDB.settings.repRankFriendly == nil then
 		GearWeightsDB.settings.repRankFriendly = true
 	end
@@ -868,6 +936,7 @@ end
 
 function GW.IsReputationTierEnabled(standing)
 	EnsureLootSettings()
+	if standing == "Neutral" then return GearWeightsDB.settings.repRankNeutral end
 	if standing == "Friendly" then return GearWeightsDB.settings.repRankFriendly end
 	if standing == "Honored" then return GearWeightsDB.settings.repRankHonored end
 	if standing == "Revered" then return GearWeightsDB.settings.repRankRevered end
@@ -877,7 +946,8 @@ end
 
 function GW.SetReputationTierEnabled(standing, enabled)
 	EnsureLootSettings()
-	if standing == "Friendly" then GearWeightsDB.settings.repRankFriendly = enabled
+	if standing == "Neutral" then GearWeightsDB.settings.repRankNeutral = enabled
+	elseif standing == "Friendly" then GearWeightsDB.settings.repRankFriendly = enabled
 	elseif standing == "Honored" then GearWeightsDB.settings.repRankHonored = enabled
 	elseif standing == "Revered" then GearWeightsDB.settings.repRankRevered = enabled
 	elseif standing == "Exalted" then GearWeightsDB.settings.repRankExalted = enabled

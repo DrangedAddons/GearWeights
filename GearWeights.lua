@@ -1633,30 +1633,46 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 										DEFAULT_CHAT_FRAME:AddMessage(string.format("  [id %d] |cff888888not resolved (GetItemInfo nil - not cached yet)|r", entry.itemID))
 									elseif not seen[itemLink] then
 										seen[itemLink] = true
-										local factionName, standing = GW.GetItemReputationRequirement(itemLink)
-										if not factionName then
-											DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s |cffff4444no \"Requires X - Y\" line found|r", itemName))
+										if GW.IsReputationItemExcluded and GW.IsReputationItemExcluded(itemName) then
+											DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s |cff888888excluded (quest-reward item, not reputation-gated)|r", itemName))
 										else
-											local knownOk = IsFactionKnown(factionName)
-											local tierOk = GW.IsReputationTierEnabled and GW.IsReputationTierEnabled(standing)
-											local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
-											local verdict
-											if not knownOk then
-												verdict = "|cff888888faction not known by this character|r"
-											elseif not tierOk then
-												verdict = "|cff888888standing tier disabled in settings|r"
-											elseif usable == false then
-												verdict = "|cffff4444not usable by your class|r"
-											elseif not diff then
-												verdict = "|cff888888no diff (nothing to compare against)|r"
-											elseif diff <= 0.05 then
-												verdict = string.format("|cff888888not an upgrade (%.1f)|r", diff)
+											local factionName, standing = GW.GetItemReputationRequirement(itemLink)
+											local knownOk, source
+											if factionName and standing then
+												knownOk = IsFactionKnown(factionName)
+												source = "tooltip"
 											else
-												verdict = string.format("|cff00ff00WOULD REPORT (+%.1f)|r", diff)
+												local override = GW.GetReputationItemOverride and GW.GetReputationItemOverride(itemName)
+												if override then
+													standing = override.standing
+													factionName = override.factionName
+													knownOk = (UnitFactionGroup("player") == override.playerFaction)
+													source = "override"
+												end
 											end
-											DEFAULT_CHAT_FRAME:AddMessage(string.format(
-												"  %s - Requires %s - %s | factionKnown=%s tierEnabled=%s | %s",
-												itemName, factionName, standing, tostring(knownOk), tostring(tierOk), verdict))
+											if not standing then
+												DEFAULT_CHAT_FRAME:AddMessage(string.format("  %s |cffff4444no \"Requires X - Y\" line found|r", itemName))
+											else
+												local tierOk = GW.IsReputationTierEnabled and GW.IsReputationTierEnabled(standing)
+												local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
+												local verdict
+												if not knownOk then
+													verdict = source == "override" and "|cff888888wrong Alliance/Horde side|r" or "|cff888888faction not known by this character|r"
+												elseif not tierOk then
+													verdict = "|cff888888standing tier disabled in settings|r"
+												elseif usable == false then
+													verdict = "|cffff4444not usable by your class|r"
+												elseif not diff then
+													verdict = "|cff888888no diff (nothing to compare against)|r"
+												elseif diff <= 0.05 then
+													verdict = string.format("|cff888888not an upgrade (%.1f)|r", diff)
+												else
+													verdict = string.format("|cff00ff00WOULD REPORT (+%.1f)|r", diff)
+												end
+												DEFAULT_CHAT_FRAME:AddMessage(string.format(
+													"  %s - Requires %s - %s (%s) | factionKnown=%s tierEnabled=%s | %s",
+													itemName, factionName, standing, source, tostring(knownOk), tostring(tierOk), verdict))
+											end
 										end
 									end
 								end
