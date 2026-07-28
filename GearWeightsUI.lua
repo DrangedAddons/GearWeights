@@ -2227,6 +2227,13 @@ local function CreateMainFrame()
 		for _, section in ipairs(settingsSections) do
 			section.header:ClearAllPoints()
 			section.header:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, offset)
+			-- The content frame's own position was never being set anywhere -
+			-- it needs an explicit anchor just like the header does, or it
+			-- has no determinate position at all (so its children never
+			-- render, and anything anchored off it - like the next section's
+			-- header - inherits that same undefined position).
+			section.content:ClearAllPoints()
+			section.content:SetPoint("TOPLEFT", section.header, "BOTTOMLEFT", 0, -4)
 			if section.content:IsShown() then
 				anchor, offset = section.content, -20
 			else
