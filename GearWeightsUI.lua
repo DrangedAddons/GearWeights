@@ -1766,6 +1766,12 @@ local function CreateMainFrame()
 		tile = true, tileSize = 32, edgeSize = 32,
 		insets = { left = 11, right = 12, top = 12, bottom = 11 },
 	})
+	-- Explicit full opacity - without this, whatever ambient transparency
+	-- this server's UI setup applies by default (a reskin addon's default
+	-- frame styling, or just a game-world background showing through more
+	-- than expected) made the panel read as busy/see-through.
+	f:SetBackdropColor(1, 1, 1, 1)
+	f:SetBackdropBorderColor(1, 1, 1, 1)
 	f:Hide()
 
 	local sizer = CreateFrame("Button", nil, f)
@@ -1977,15 +1983,24 @@ local function CreateMainFrame()
 	-- actually works. Two rows, backed by GW.Is/SetDungeonRankTierEnabled
 	-- and GW.Is/SetRaidRankTierEnabled respectively - Raids gets a 4th
 	-- "Ascended" tier (one step past Mythic) that dungeons don't have.
-	-- Thin horizontal rule, full panel width, used to visually separate the
-	-- Dungeons/Raids/Other source rows from each other and to bracket the
-	-- weapon box row - purely decorative, no interactive purpose.
-	local function CreateDivider(yOffset)
+	-- Thin horizontal rule, full panel width, purely decorative. Two styles:
+	-- plain/muted (default) separates closely related rows within the same
+	-- group (e.g. Raids from Other Sources - both are still source
+	-- toggles), while major=true (brighter gold tint, a touch taller) marks
+	-- a bigger conceptual jump - between the source/tier toggles and View by
+	-- Slot, and bracketing the weapon boxes, which aren't source toggles at
+	-- all. Callers are responsible for leaving a few pixels of clearance on
+	-- both sides - a divider flush against the next row reads as touching
+	-- it, not separating it.
+	local function CreateDivider(yOffset, major)
 		local divider = dungeonRankPanel:CreateTexture(nil, "ARTWORK")
-		divider:SetHeight(8)
+		divider:SetHeight(major and 10 or 8)
 		divider:SetPoint("TOPLEFT", dungeonRankPanel, "TOPLEFT", 0, yOffset)
 		divider:SetPoint("TOPRIGHT", dungeonRankPanel, "TOPRIGHT", -4, yOffset)
 		divider:SetTexture("Interface\\Common\\UI-TooltipDivider")
+		if major then
+			divider:SetVertexColor(1, 0.82, 0)
+		end
 		return divider
 	end
 
@@ -2032,7 +2047,7 @@ local function CreateMainFrame()
 	CreateTierCheckRow("dungeon", "Dungeons", -2, GW.IsDungeonRankTierEnabled, GW.SetDungeonRankTierEnabled, DUNGEON_TIERS)
 	CreateTierCheckRow("raid", "Raids", -24, GW.IsRaidRankTierEnabled, GW.SetRaidRankTierEnabled, RAID_TIERS)
 
-	CreateDivider(-44)
+	CreateDivider(-46)
 
 	-- "Other Sources" - a quick on/off for Vendor and Reputation upgrades in
 	-- the out-of-instance ranking scan, separate from the finer-grained
@@ -2049,7 +2064,7 @@ local function CreateMainFrame()
 			if prevCheck then
 				check:SetPoint("LEFT", prevCheck, "RIGHT", TIER_CHECK_SPACING, 0)
 			else
-				check:SetPoint("TOPLEFT", TIER_CHECK_FIRST_X, -52)
+				check:SetPoint("TOPLEFT", TIER_CHECK_FIRST_X, -58)
 			end
 			check:SetChecked(GW.IsOtherSourceEnabled(source))
 			check:SetScript("OnClick", function(self)
@@ -2069,7 +2084,7 @@ local function CreateMainFrame()
 		end
 	end
 
-	CreateDivider(-72)
+	CreateDivider(-82, true)
 
 	--------------------------------------------------------------------
 	-- Weapon baseline display - 3 independent slot icons (Two-Hand / Main
@@ -2095,7 +2110,7 @@ local function CreateMainFrame()
 			-- down to make room; see the anchor changes further down). A
 			-- little extra breathing room above so the row doesn't feel
 			-- cramped against the checkbox above it.
-			button:SetPoint("TOPLEFT", 0, -108)
+			button:SetPoint("TOPLEFT", 0, -138)
 		end
 
 		local lockIcon = button:CreateTexture(nil, "OVERLAY")
@@ -2109,7 +2124,7 @@ local function CreateMainFrame()
 		return button
 	end
 
-	CreateDivider(-100)
+	CreateDivider(-122, true)
 
 	local weaponBaselineButtons = {}
 	local prevButton
@@ -2128,7 +2143,7 @@ local function CreateMainFrame()
 	weaponBoxHint:SetJustifyH("LEFT")
 	weaponBoxHint:SetText("Drag a weapon onto a box to set your reference. Click to lock/unlock - locked boxes won't change when you re-equip.")
 
-	CreateDivider(-146)
+	CreateDivider(-176, true)
 
 	local function RefreshWeaponBaselineDisplay()
 		for _, box in ipairs(WEAPON_BOX_ORDER) do
@@ -2201,7 +2216,7 @@ local function CreateMainFrame()
 
 	local viewBySlotCheck = CreateFrame("CheckButton", nil, dungeonRankPanel, "UICheckButtonTemplate")
 	viewBySlotCheck:SetSize(18, 18)
-	viewBySlotCheck:SetPoint("TOPLEFT", 0, -80)
+	viewBySlotCheck:SetPoint("TOPLEFT", 0, -98)
 	viewBySlotCheck:SetChecked(dungeonRankViewMode == "slot")
 	viewBySlotCheck:SetScript("OnClick", function(self)
 		dungeonRankViewMode = self:GetChecked() and "slot" or "zone"
@@ -2217,7 +2232,7 @@ local function CreateMainFrame()
 	-- checkbox labels doesn't reliably fit once the window is resized narrow.
 	local dungeonRankRescan = CreateFrame("Button", nil, dungeonRankPanel, "UIPanelButtonTemplate")
 	dungeonRankRescan:SetSize(170, 20)
-	dungeonRankRescan:SetPoint("TOPLEFT", 0, -154)
+	dungeonRankRescan:SetPoint("TOPLEFT", 0, -192)
 	dungeonRankRescan:SetText("Scan All Sources")
 	dungeonRankRescan:SetScript("OnClick", function()
 		GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
@@ -2225,12 +2240,12 @@ local function CreateMainFrame()
 	end)
 
 	dungeonRankStatusText = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -180)
+	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -218)
 	dungeonRankStatusText:SetPoint("RIGHT", -2, 0)
 	dungeonRankStatusText:SetJustifyH("LEFT")
 
 	dungeonRankScrollFrame = CreateFrame("ScrollFrame", "GearWeightsDungeonRankScrollFrame", dungeonRankPanel, "UIPanelScrollFrameTemplate")
-	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -200)
+	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -238)
 	dungeonRankScrollFrame:SetPoint("BOTTOMRIGHT", -34, 2)
 
 	dungeonRankContent = CreateFrame("Frame", nil, dungeonRankScrollFrame)
@@ -2584,9 +2599,15 @@ local function CreateMainFrame()
 
 	-- Standing tiers - a short vertical list to the right of the faction
 	-- column above, same layout idea as Armor Types next to Included Slots.
+	-- Highest standing first (Exalted at top) - GW.REPUTATION_STANDING_ORDER
+	-- itself stays low-to-high (also used to build the ranking list's
+	-- F/H/R/E summary counts in that order), so this just walks it backwards
+	-- for display here rather than reordering the shared list.
 	local REP_STANDING_COLUMN_X = 230
 	local reputationTierChecks = {}
-	for i, standing in ipairs(GW.REPUTATION_STANDING_ORDER) do
+	local standingCount = #GW.REPUTATION_STANDING_ORDER
+	for i = 1, standingCount do
+		local standing = GW.REPUTATION_STANDING_ORDER[standingCount - i + 1]
 		local check = CreateFrame("CheckButton", nil, reputationContent, "UICheckButtonTemplate")
 		check:SetSize(16, 16)
 		check:SetPoint("TOPLEFT", reputationHint, "BOTTOMLEFT", REP_STANDING_COLUMN_X, -20 - (i - 1) * REP_ROW_HEIGHT)
