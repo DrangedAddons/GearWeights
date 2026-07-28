@@ -394,7 +394,11 @@ local DUNGEON_ZONE_DISPLAY_ORDER = {
 -- needs it too, to build the per-faction checklist.
 GW.REPUTATION_ZONE_LIST = {
 	{ key = "Argent", name = "Argent Dawn" },
-	{ key = "AQBroodRings", name = "Brood of Nozdormu" },
+	-- Brood of Nozdormu rep is earned in Blackwing Lair, which isn't
+	-- confirmed live on this server yet (see RAID_ZONE_NAME_WHITELIST) -
+	-- same "listed but greyed out/inert" treatment as an unavailable raid,
+	-- so it's ready to flip on once BWL is.
+	{ key = "AQBroodRings", name = "Brood of Nozdormu", available = false },
 	{ key = "AlteracFactions", name = "Alterac Valley" },
 	{ key = "ArathiBasinFactions", name = "Arathi Basin" },
 	{ key = "Timbermaw", name = "Timbermaw Hold" },
@@ -617,7 +621,7 @@ function GW.BuildReputationRankingList(onProgress, onComplete)
 	local resultByKey = {}
 	for _, repZone in ipairs(GW.REPUTATION_ZONE_LIST) do
 		local data = AtlasLoot_Data[repZone.key]
-		if data and not GW.IsReputationFactionExcluded(repZone.key) then
+		if data and repZone.available ~= false and not GW.IsReputationFactionExcluded(repZone.key) then
 			resultByKey[repZone.key] = {
 				zoneKey = repZone.key, zoneName = repZone.name, category = "reputation",
 				Friendly = 0, Honored = 0, Revered = 0, Exalted = 0, total = 0, items = {},

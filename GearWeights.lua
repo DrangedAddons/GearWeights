@@ -1620,6 +1620,9 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 					end
 
 					DEFAULT_CHAT_FRAME:AddMessage("-- Reputation check: " .. matchedZone.name .. " (key=" .. matchedZone.key .. ") --")
+					if matchedZone.available == false then
+						DEFAULT_CHAT_FRAME:AddMessage("  |cffff4444Note: this faction is marked unavailable (not confirmed live on this server yet) and is greyed out/excluded from the real scan regardless of the verdicts below.|r")
+					end
 					local seen = {}
 					for _, boss in ipairs(data) do
 						for _, section in ipairs(boss) do
@@ -1638,7 +1641,11 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 											local tierOk = GW.IsReputationTierEnabled and GW.IsReputationTierEnabled(standing)
 											local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
 											local verdict
-											if usable == false then
+											if not knownOk then
+												verdict = "|cff888888faction not known by this character|r"
+											elseif not tierOk then
+												verdict = "|cff888888standing tier disabled in settings|r"
+											elseif usable == false then
 												verdict = "|cffff4444not usable by your class|r"
 											elseif not diff then
 												verdict = "|cff888888no diff (nothing to compare against)|r"

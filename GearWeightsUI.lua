@@ -2584,16 +2584,38 @@ local function CreateMainFrame()
 		local check = CreateFrame("CheckButton", nil, reputationContent, "UICheckButtonTemplate")
 		check:SetSize(16, 16)
 		check:SetPoint("TOPLEFT", reputationHint, "BOTTOMLEFT", 0, -20 - (i - 1) * REP_ROW_HEIGHT)
-		check:SetChecked(not GW.IsReputationFactionExcluded(repZone.key))
-		check:SetScript("OnClick", function(self)
-			GW.SetReputationFactionExcluded(repZone.key, not (self:GetChecked() and true or false))
-			if RefreshDungeonRankPanel then RefreshDungeonRankPanel() end
-			GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
-		end)
 		local text = reputationContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
 		text:SetWordWrap(false)
 		text:SetText(repZone.name)
+
+		if repZone.available == false then
+			-- Same "listed but greyed out/inert" treatment as an unavailable
+			-- raid zone below (RAID_ZONE_NAME_WHITELIST) - e.g. Brood of
+			-- Nozdormu, which is earned in Blackwing Lair and isn't
+			-- confirmed live on this server yet.
+			check:SetChecked(true)
+			check:Disable()
+			text:SetFontObject("GameFontDisableSmall")
+			local hitbox = CreateFrame("Frame", nil, reputationContent)
+			hitbox:SetPoint("TOPLEFT", check, "TOPLEFT", 0, 0)
+			hitbox:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 0, 0)
+			hitbox:EnableMouse(true)
+			hitbox:SetScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:AddLine("Not yet available", 1, 0.2, 0.2)
+				GameTooltip:AddLine(repZone.name .. " isn't confirmed live on this server yet, so it's not tracked.", nil, nil, nil, true)
+				GameTooltip:Show()
+			end)
+			hitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		else
+			check:SetChecked(not GW.IsReputationFactionExcluded(repZone.key))
+			check:SetScript("OnClick", function(self)
+				GW.SetReputationFactionExcluded(repZone.key, not (self:GetChecked() and true or false))
+				if RefreshDungeonRankPanel then RefreshDungeonRankPanel() end
+				GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
+			end)
+		end
 		reputationFactionChecks[repZone.key] = check
 	end
 
