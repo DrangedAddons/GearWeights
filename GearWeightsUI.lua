@@ -2138,7 +2138,7 @@ local function CreateMainFrame()
 	settingsScrollFrame:SetPoint("BOTTOMRIGHT", -28, 4)
 
 	local settingsContent = CreateFrame("Frame", nil, settingsScrollFrame)
-	settingsContent:SetSize(430, 900)
+	settingsContent:SetSize(430, 1100)
 	settingsScrollFrame:SetScrollChild(settingsContent)
 
 	local settingsHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -2297,9 +2297,9 @@ local function CreateMainFrame()
 		end
 	end
 
-	local ZONE_RAID_START_X = 220
-	local ZONE_COL_WIDTH_DUNGEON = 105
-	local ZONE_COL_WIDTH_RAID = 95
+	-- One column per side (not two) - dungeon/raid zone names are long
+	-- enough that a second column per side overlapped the next one over.
+	local ZONE_RAID_START_X = 230
 	local ZONE_ROW_HEIGHT = 20
 	local ZONE_ROWS_START_Y = -24
 
@@ -2312,13 +2312,11 @@ local function CreateMainFrame()
 	raidZoneLabel:SetText("Raids")
 
 	local zoneFilterChecks = {}
-	local function CreateZoneCheckColumn(zones, startX, colWidth)
+	local function CreateZoneCheckColumn(zones, startX)
 		for i, zone in ipairs(zones) do
-			local col = (i - 1) % 2
-			local row = math.floor((i - 1) / 2)
 			local check = CreateFrame("CheckButton", nil, settingsContent, "UICheckButtonTemplate")
 			check:SetSize(16, 16)
-			check:SetPoint("TOPLEFT", zoneFilterHint, "BOTTOMLEFT", startX + col * colWidth, ZONE_ROWS_START_Y - row * ZONE_ROW_HEIGHT)
+			check:SetPoint("TOPLEFT", zoneFilterHint, "BOTTOMLEFT", startX, ZONE_ROWS_START_Y - (i - 1) * ZONE_ROW_HEIGHT)
 			check:SetChecked(not GW.IsZoneExcluded(zone.key))
 			check:SetScript("OnClick", function(self)
 				GW.SetZoneExcluded(zone.key, not (self:GetChecked() and true or false))
@@ -2333,8 +2331,8 @@ local function CreateMainFrame()
 		end
 	end
 
-	CreateZoneCheckColumn(dungeonZones, 0, ZONE_COL_WIDTH_DUNGEON)
-	CreateZoneCheckColumn(raidZones, ZONE_RAID_START_X, ZONE_COL_WIDTH_RAID)
+	CreateZoneCheckColumn(dungeonZones, 0)
+	CreateZoneCheckColumn(raidZones, ZONE_RAID_START_X)
 
 	return f
 end
