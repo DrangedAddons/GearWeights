@@ -1209,46 +1209,77 @@ end
 -- independently locked (freezes it against further equip changes - protects
 -- against a temporary quest-required weapon swap) or manually set by
 -- dragging an item onto it in the UI.
+--
+-- Keyed per-spec (GW.GetCurrentSpecId(), same pattern as GW.GetActiveProfile
+-- for stat-weight profiles) - this is a classless/hybrid-class server, so
+-- switching spec commonly means switching to a completely different weapon
+-- type, and each spec should track its own reference loadout independently
+-- instead of one shared set of boxes fighting over both.
 --------------------------------------------------------------------------------
 
 local WEAPON_BOX_KEYS = { twoHand = true, mainHand = true, offHand = true }
 
+-- Returns the current spec's own box table, migrating forward as needed.
 local function EnsureWeaponBaseline()
 	GearWeightsDB = GearWeightsDB or {}
 	GearWeightsDB.weaponBaseline = GearWeightsDB.weaponBaseline or {}
+
+	-- Pre-1.26.40 versions kept one flat, shared set of boxes for every spec -
+	-- detected here by a WEAPON_BOX_KEYS entry sitting directly under
+	-- weaponBaseline instead of under a specId layer - migrated into the
+	-- currently active spec's own bucket the first time this runs after
+	-- upgrading, so an already-locked/tracked weapon isn't lost.
+	local isFlatLegacyShape = false
 	for key in pairs(WEAPON_BOX_KEYS) do
-		-- An earlier version (1.21.x) stored this as a flat { locked, mainHand
-		-- = link, offHand = link } shape - mainHand/offHand were raw link
-		-- strings, not sub-tables. `or {...}` alone wouldn't replace a
-		-- leftover string (it's truthy), and assigning a field onto a string
-		-- value errors, so explicitly check the type instead of just nil.
-		if type(GearWeightsDB.weaponBaseline[key]) ~= "table" then
-			GearWeightsDB.weaponBaseline[key] = { link = nil, locked = false }
+		if type(GearWeightsDB.weaponBaseline[key]) == "table" then
+			isFlatLegacyShape = true
+			break
 		end
 	end
+	if isFlatLegacyShape then
+		local legacy = GearWeightsDB.weaponBaseline
+		GearWeightsDB.weaponBaseline = { [GW.GetCurrentSpecId()] = legacy }
+	end
+
+	local specId = GW.GetCurrentSpecId()
+	local perSpec = GearWeightsDB.weaponBaseline[specId]
+	if type(perSpec) ~= "table" then
+		perSpec = {}
+		GearWeightsDB.weaponBaseline[specId] = perSpec
+	end
+	for key in pairs(WEAPON_BOX_KEYS) do
+		-- An even older version (1.21.x) stored mainHand/offHand as raw link
+		-- strings rather than sub-tables - `or {...}` alone wouldn't replace a
+		-- leftover string (it's truthy), and assigning a field onto a string
+		-- value errors, so explicitly check the type instead of just nil.
+		if type(perSpec[key]) ~= "table" then
+			perSpec[key] = { link = nil, locked = false }
+		end
+	end
+	return perSpec
 end
 
 function GW.GetWeaponBoxLink(box)
-	EnsureWeaponBaseline()
-	return GearWeightsDB.weaponBaseline[box].link
+	local perSpec = EnsureWeaponBaseline()
+	return perSpec[box].link
 end
 
 function GW.IsWeaponBoxLocked(box)
-	EnsureWeaponBaseline()
-	return GearWeightsDB.weaponBaseline[box].locked
+	local perSpec = EnsureWeaponBaseline()
+	return perSpec[box].locked
 end
 
 function GW.SetWeaponBoxLocked(box, locked)
-	EnsureWeaponBaseline()
-	GearWeightsDB.weaponBaseline[box].locked = locked and true or false
+	local perSpec = EnsureWeaponBaseline()
+	perSpec[box].locked = locked and true or false
 end
 
 -- Manually assigns a box's reference item (e.g. dragged onto it in the UI),
 -- regardless of that box's current lock state - an explicit action always
 -- takes effect immediately.
 function GW.SetWeaponBoxLink(box, link)
-	EnsureWeaponBaseline()
-	GearWeightsDB.weaponBaseline[box].link = link
+	local perSpec = EnsureWeaponBaseline()
+	perSpec[box].link = link
 end
 
 -- Called on equip changes: updates every unlocked box according to what's
@@ -1256,8 +1287,7 @@ end
 -- category isn't currently active (e.g. Main Hand/Off Hand while a 2H is
 -- equipped) - untouched instead of clearing them.
 function GW.SyncWeaponBoxesFromEquipped()
-	EnsureWeaponBaseline()
-	local baseline = GearWeightsDB.weaponBaseline
+	local baseline = EnsureWeaponBaseline()
 	local mhLink = GetInventoryItemLink("player", INVSLOT_MAINHAND)
 	local ohLink = GetInventoryItemLink("player", INVSLOT_OFFHAND)
 	local mhIs2H = false
