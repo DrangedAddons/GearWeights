@@ -344,29 +344,6 @@ function GW.GetTrackedZoneList()
 	return zones
 end
 
--- Whether a specific zone (Settings tab checklist) is excluded from the
--- out-of-instance ranking scan entirely - a "should I bother going here"
--- filter, separate from GW.IsSlotLocked/IsArmorTypeExcluded which affect
--- whether an item counts as an upgrade anywhere it's evaluated (tooltips
--- included). Zone exclusion only ever affects GW.BuildDungeonRankingList -
--- walking into an excluded zone in person still shows its upgrades via
--- GW.BuildInstanceLootList, same as always.
-function GW.IsZoneExcluded(zoneKey)
-	EnsureLootSettings()
-	GearWeightsDB.settings.excludedZones = GearWeightsDB.settings.excludedZones or {}
-	return GearWeightsDB.settings.excludedZones[zoneKey] == true
-end
-
-function GW.SetZoneExcluded(zoneKey, excluded)
-	EnsureLootSettings()
-	GearWeightsDB.settings.excludedZones = GearWeightsDB.settings.excludedZones or {}
-	if excluded then
-		GearWeightsDB.settings.excludedZones[zoneKey] = true
-	else
-		GearWeightsDB.settings.excludedZones[zoneKey] = nil
-	end
-end
-
 local RANKING_BATCH_SIZE = 20
 
 -- options: { dungeon = { normal = bool, heroic = bool, mythic = bool },
@@ -956,6 +933,29 @@ function GW.GetArmorTypeIgnoreReason(itemLink)
 		return "Excluded armor type"
 	end
 	return nil
+end
+
+-- Whether a specific zone (Settings tab checklist, GW.GetTrackedZoneList) is
+-- excluded from the out-of-instance ranking scan entirely - a "should I
+-- bother going here" filter, separate from GW.IsSlotLocked/IsArmorTypeExcluded
+-- which affect whether an item counts as an upgrade anywhere it's evaluated
+-- (tooltips included). Zone exclusion only ever affects
+-- GW.BuildDungeonRankingList - walking into an excluded zone in person still
+-- shows its upgrades via GW.BuildInstanceLootList, same as always.
+function GW.IsZoneExcluded(zoneKey)
+	EnsureLootSettings()
+	GearWeightsDB.settings.excludedZones = GearWeightsDB.settings.excludedZones or {}
+	return GearWeightsDB.settings.excludedZones[zoneKey] == true
+end
+
+function GW.SetZoneExcluded(zoneKey, excluded)
+	EnsureLootSettings()
+	GearWeightsDB.settings.excludedZones = GearWeightsDB.settings.excludedZones or {}
+	if excluded then
+		GearWeightsDB.settings.excludedZones[zoneKey] = true
+	else
+		GearWeightsDB.settings.excludedZones[zoneKey] = nil
+	end
 end
 
 local lastZoneChecked
