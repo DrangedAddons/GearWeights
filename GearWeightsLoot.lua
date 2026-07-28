@@ -295,8 +295,11 @@ local DUNGEON_ZONE_TYPES = {
 local RAID_ZONE_TYPES = {
 	ClassicRaid = true,
 }
-local TIER_PARAM = { normal = 3, heroic = 4, mythic = 5 }
-local TIER_SECTION_MATCH = { normal = "Normal", heroic = "Heroic", mythic = "Heroic" }
+-- Ascended is a raid-only difficulty one step past Mythic (same
+-- GetItemDifficultyID scaling mechanism, just a higher param) - not offered
+-- for dungeons, see GW.IsRaidRankTierEnabled/GearWeightsUI.lua's Raids row.
+local TIER_PARAM = { normal = 3, heroic = 4, mythic = 5, ascended = 6 }
+local TIER_SECTION_MATCH = { normal = "Normal", heroic = "Heroic", mythic = "Heroic", ascended = "Heroic" }
 
 -- These share AtlasLoot's "ClassicDungeonExt" Type but aren't real queueable
 -- dungeons - "Shared Dungeon Loot" and the Tier 0/0.5 dungeon set pages are
@@ -401,11 +404,13 @@ end
 local RANKING_BATCH_SIZE = 20
 
 -- options: { dungeon = { normal = bool, heroic = bool, mythic = bool },
---            raid = { normal = bool, heroic = bool, mythic = bool } }
+--            raid = { normal = bool, heroic = bool, mythic = bool, ascended = bool } }
 -- Dungeon and raid tiers are filtered independently - raids are typically a
 -- tier below the equivalent dungeon difficulty in practice, so someone who's
 -- moved past Heroic/Mythic dungeons into Normal raids wants both filters set
 -- differently rather than one Normal/Heroic/Mythic toggle applying to both.
+-- Ascended is a raid-only 4th tier, one step past Mythic - dungeons don't
+-- have it.
 -- onProgress(processedCount, totalCount) - called periodically during the scan.
 -- onComplete(results) - results: array of
 --   { zoneKey, zoneName, category = "dungeon"/"raid", normal=N, heroic=N, mythic=N, total=N,
@@ -428,6 +433,7 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 	if options.raid.normal then table.insert(raidTiers, "normal") end
 	if options.raid.heroic then table.insert(raidTiers, "heroic") end
 	if options.raid.mythic then table.insert(raidTiers, "mythic") end
+	if options.raid.ascended then table.insert(raidTiers, "ascended") end
 
 	-- Anything that's neither dungeon nor raid (currently just the vendor
 	-- bucket, ZONE_CATEGORY_OVERRIDE) isn't gated by either filter at all -
@@ -446,7 +452,7 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 		local category = ClassifyZoneCategory(key, data)
 		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] and not EXCLUDED_ZONE_NAMES[data.Name] and IsZoneAvailable(category, data.Name) and not GW.IsZoneExcluded(key) then
 			table.insert(zones, { key = key, data = data, category = category })
-			resultByKey[key] = { zoneKey = key, zoneName = data.Name, category = category, normal = 0, heroic = 0, mythic = 0, total = 0, items = {} }
+			resultByKey[key] = { zoneKey = key, zoneName = data.Name, category = category, normal = 0, heroic = 0, mythic = 0, ascended = 0, total = 0, items = {} }
 		end
 	end
 
@@ -639,6 +645,10 @@ local function EnsureLootSettings()
 	if GearWeightsDB.settings.raidRankMythic == nil then
 		GearWeightsDB.settings.raidRankMythic = true
 	end
+	-- Raid-only 4th tier, one step past Mythic - dungeons don't have it.
+	if GearWeightsDB.settings.raidRankAscended == nil then
+		GearWeightsDB.settings.raidRankAscended = true
+	end
 end
 
 function GW.IsDungeonRankTierEnabled(tier)
@@ -654,6 +664,7 @@ function GW.IsRaidRankTierEnabled(tier)
 	if tier == "normal" then return GearWeightsDB.settings.raidRankNormal end
 	if tier == "heroic" then return GearWeightsDB.settings.raidRankHeroic end
 	if tier == "mythic" then return GearWeightsDB.settings.raidRankMythic end
+	if tier == "ascended" then return GearWeightsDB.settings.raidRankAscended end
 	return false
 end
 
@@ -670,6 +681,7 @@ function GW.SetRaidRankTierEnabled(tier, enabled)
 	if tier == "normal" then GearWeightsDB.settings.raidRankNormal = enabled
 	elseif tier == "heroic" then GearWeightsDB.settings.raidRankHeroic = enabled
 	elseif tier == "mythic" then GearWeightsDB.settings.raidRankMythic = enabled
+	elseif tier == "ascended" then GearWeightsDB.settings.raidRankAscended = enabled
 	end
 end
 
@@ -1112,6 +1124,7 @@ function GW.RunDungeonRankingScan(onComplete)
 			normal = GW.IsRaidRankTierEnabled("normal"),
 			heroic = GW.IsRaidRankTierEnabled("heroic"),
 			mythic = GW.IsRaidRankTierEnabled("mythic"),
+			ascended = GW.IsRaidRankTierEnabled("ascended"),
 		},
 	}
 	GW.BuildDungeonRankingList(options, function(processed, total)

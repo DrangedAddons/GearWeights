@@ -672,6 +672,7 @@ local function SetDungeonRankRowAsItem(row, result)
 	if isTierEnabled("normal") then table.insert(parts, "N:" .. result.normal) end
 	if isTierEnabled("heroic") then table.insert(parts, "H:" .. result.heroic) end
 	if isTierEnabled("mythic") then table.insert(parts, "M:" .. result.mythic) end
+	if result.category == "raid" and isTierEnabled("ascended") then table.insert(parts, "A:" .. result.ascended) end
 	row.countsText:SetText(table.concat(parts, "  ") .. string.format("  |cffffff00(%d total)|r", result.total))
 	row.priceIcon:Hide()
 	row.priceHitbox:Hide()
@@ -686,7 +687,7 @@ local function SetDungeonRankRowAsItem(row, result)
 	end)
 end
 
-local TIER_LABEL = { normal = "Normal", heroic = "Heroic", mythic = "Mythic" }
+local TIER_LABEL = { normal = "Normal", heroic = "Heroic", mythic = "Mythic", ascended = "Ascended" }
 
 local function SetDungeonRankRowAsBossHeader(row, bossName)
 	SetDungeonRowFullWidthName(row)
@@ -804,7 +805,8 @@ RefreshDungeonRankPanel = function()
 		if not cached then
 			dungeonRankStatusText:SetText("No scan yet - click Scan All Dungeons/Raids below.")
 		elseif not (GW.IsDungeonRankTierEnabled("normal") or GW.IsDungeonRankTierEnabled("heroic") or GW.IsDungeonRankTierEnabled("mythic")
-			or GW.IsRaidRankTierEnabled("normal") or GW.IsRaidRankTierEnabled("heroic") or GW.IsRaidRankTierEnabled("mythic")) then
+			or GW.IsRaidRankTierEnabled("normal") or GW.IsRaidRankTierEnabled("heroic") or GW.IsRaidRankTierEnabled("mythic")
+			or GW.IsRaidRankTierEnabled("ascended")) then
 			dungeonRankStatusText:SetText("Tick at least one difficulty above to see results.")
 		else
 			local currentSpec = GW.GetCurrentSpecId and GW.GetCurrentSpecId()
@@ -1912,15 +1914,17 @@ local function CreateMainFrame()
 	-- Dungeon and raid tiers are filtered independently - you're typically
 	-- past Heroic/Mythic dungeons by the time Normal raids are relevant, so
 	-- one shared Normal/Heroic/Mythic row wouldn't fit how progression
-	-- actually works. Two rows, same 3 tiers each, backed by
-	-- GW.Is/SetDungeonRankTierEnabled and GW.Is/SetRaidRankTierEnabled
-	-- respectively.
+	-- actually works. Two rows, backed by GW.Is/SetDungeonRankTierEnabled
+	-- and GW.Is/SetRaidRankTierEnabled respectively - Raids gets a 4th
+	-- "Ascended" tier (one step past Mythic) that dungeons don't have.
 	local TIER_CHECK_FIRST_X = 62
 	local TIER_CHECK_SPACING = 60
+	local DUNGEON_TIERS = { { "normal", "Normal" }, { "heroic", "Heroic" }, { "mythic", "Mythic" } }
+	local RAID_TIERS = { { "normal", "Normal" }, { "heroic", "Heroic" }, { "mythic", "Mythic" }, { "ascended", "Ascended" } }
 	local tierChecks = { dungeon = {}, raid = {} }
-	local function CreateTierCheckRow(category, categoryLabel, rowY, isFn, setFn)
+	local function CreateTierCheckRow(category, categoryLabel, rowY, isFn, setFn, tierList)
 		local prevCheck
-		for _, tierInfo in ipairs({ { "normal", "Normal" }, { "heroic", "Heroic" }, { "mythic", "Mythic" } }) do
+		for _, tierInfo in ipairs(tierList) do
 			local tier, label = tierInfo[1], tierInfo[2]
 			local check = CreateFrame("CheckButton", nil, dungeonRankPanel, "UICheckButtonTemplate")
 			check:SetSize(18, 18)
@@ -1953,8 +1957,8 @@ local function CreateMainFrame()
 		end
 	end
 
-	CreateTierCheckRow("dungeon", "Dungeons", -2, GW.IsDungeonRankTierEnabled, GW.SetDungeonRankTierEnabled)
-	CreateTierCheckRow("raid", "Raids", -24, GW.IsRaidRankTierEnabled, GW.SetRaidRankTierEnabled)
+	CreateTierCheckRow("dungeon", "Dungeons", -2, GW.IsDungeonRankTierEnabled, GW.SetDungeonRankTierEnabled, DUNGEON_TIERS)
+	CreateTierCheckRow("raid", "Raids", -24, GW.IsRaidRankTierEnabled, GW.SetRaidRankTierEnabled, RAID_TIERS)
 
 	--------------------------------------------------------------------
 	-- Weapon baseline display - 3 independent slot icons (Two-Hand / Main
