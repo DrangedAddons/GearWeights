@@ -481,6 +481,15 @@ local REPUTATION_ITEM_STANDING_OVERRIDE = {
 	["Wrath of Cenarius"] = { standing = "Exalted", factionName = "Cenarion Circle" },
 	["Earthstrike"] = { standing = "Exalted", factionName = "Cenarion Circle" },
 	["UnusedFist of Cenarius"] = { standing = "Exalted", factionName = "Cenarion Circle" },
+	-- Desolace Centaur Clans - Gelkis and Magram are a mutually-exclusive
+	-- choice (raising one lowers the other), not an Alliance/Horde lock, so
+	-- per the user both sides' items are listed regardless of which track
+	-- the player has actually chosen - same "worth going to earn" reasoning
+	-- as everything else that isn't a hard side-lock.
+	["Ceremonial Centaur Blanket"] = { standing = "Friendly", factionName = "Desolace Centaur Clans" },
+	["Magram Hunter's Belt"] = { standing = "Friendly", factionName = "Desolace Centaur Clans" },
+	["Gelkis Marauder Chain"] = { standing = "Friendly", factionName = "Desolace Centaur Clans" },
+	["Uthek's Finger"] = { standing = "Friendly", factionName = "Desolace Centaur Clans" },
 }
 
 -- A handful of NPC reputation factions are exclusive to one player faction
