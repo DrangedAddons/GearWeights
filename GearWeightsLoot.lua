@@ -588,6 +588,9 @@ local function EnsureLootSettings()
 	if GearWeightsDB.settings.targetLootEnabled == nil then
 		GearWeightsDB.settings.targetLootEnabled = true
 	end
+	if GearWeightsDB.settings.autoConfirmGreedRoll == nil then
+		GearWeightsDB.settings.autoConfirmGreedRoll = true
+	end
 	if GearWeightsDB.settings.glowInstanceLoot == nil then
 		GearWeightsDB.settings.glowInstanceLoot = false
 	end
@@ -776,6 +779,19 @@ end
 function GW.SetTargetLootEnabled(enabled)
 	EnsureLootSettings()
 	GearWeightsDB.settings.targetLootEnabled = enabled
+end
+
+-- Whether clicking Greed on a Bind-on-Pickup loot roll should auto-confirm
+-- the "this item will bind to you" popup instead of making you click
+-- through it manually. Need rolls are untouched - only Greed.
+function GW.IsAutoConfirmGreedEnabled()
+	EnsureLootSettings()
+	return GearWeightsDB.settings.autoConfirmGreedRoll
+end
+
+function GW.SetAutoConfirmGreedEnabled(enabled)
+	EnsureLootSettings()
+	GearWeightsDB.settings.autoConfirmGreedRoll = enabled
 end
 
 --------------------------------------------------------------------------------
