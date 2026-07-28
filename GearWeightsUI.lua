@@ -722,10 +722,13 @@ local function SetDungeonRankRowAsSubItem(row, item)
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r", item.diff))
 		SetDungeonRowPrice(row, item.itemLink, true)
 	elseif item.isReputationItem then
+		-- Just the standing, not "Requires <Faction> - <Standing>" - the
+		-- faction is already the zone group this row sits under, so
+		-- repeating it here would just claim space for no new information.
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r", item.diff))
 		row.priceIcon:Hide()
 		row.priceHitbox:Hide()
-		row.priceText:SetText(string.format("|cff888888Requires %s - %s|r", item.bossName or "?", item.tier or "?"))
+		row.priceText:SetText(string.format("|cff888888%s|r", item.tier or "?"))
 	else
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888(%s)|r",
 			item.diff, TIER_LABEL[item.tier] or item.tier))
@@ -782,10 +785,13 @@ local function SetDungeonRankRowAsSlotItem(row, item)
 		-- item.bossName is the faction name here too - same as item.zoneName,
 		-- since a reputation "zone" is always exactly one faction, so
 		-- skip the redundant "X - X" that `source` would otherwise show.
+		-- The faction name is already shown via item.zoneName here, so the
+		-- price-area text only needs the standing itself, not "Requires
+		-- <Faction> - <Standing>" repeating what's already on the row.
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888%s|r", item.diff, item.zoneName or "?"))
 		row.priceIcon:Hide()
 		row.priceHitbox:Hide()
-		row.priceText:SetText(string.format("|cff888888Requires %s - %s|r", item.bossName or "?", item.tier or "?"))
+		row.priceText:SetText(string.format("|cff888888%s|r", item.tier or "?"))
 	else
 		row.countsText:SetText(string.format("|cff00ff00+%.1f|r  |cff888888%s (%s)|r",
 			item.diff, source or "?", TIER_LABEL[item.tier] or item.tier))
@@ -828,7 +834,7 @@ RefreshDungeonRankPanel = function()
 	else
 		dungeonRankPollFrame:Hide()
 		if not cached then
-			dungeonRankStatusText:SetText("No scan yet - click Scan All Dungeons/Raids below.")
+			dungeonRankStatusText:SetText("No scan yet - click Scan All Sources below.")
 		elseif not (GW.IsDungeonRankTierEnabled("normal") or GW.IsDungeonRankTierEnabled("heroic") or GW.IsDungeonRankTierEnabled("mythic")
 			or GW.IsRaidRankTierEnabled("normal") or GW.IsRaidRankTierEnabled("heroic") or GW.IsRaidRankTierEnabled("mythic")
 			or GW.IsRaidRankTierEnabled("ascended")) then
@@ -1971,6 +1977,18 @@ local function CreateMainFrame()
 	-- actually works. Two rows, backed by GW.Is/SetDungeonRankTierEnabled
 	-- and GW.Is/SetRaidRankTierEnabled respectively - Raids gets a 4th
 	-- "Ascended" tier (one step past Mythic) that dungeons don't have.
+	-- Thin horizontal rule, full panel width, used to visually separate the
+	-- Dungeons/Raids/Other source rows from each other and to bracket the
+	-- weapon box row - purely decorative, no interactive purpose.
+	local function CreateDivider(yOffset)
+		local divider = dungeonRankPanel:CreateTexture(nil, "ARTWORK")
+		divider:SetHeight(8)
+		divider:SetPoint("TOPLEFT", dungeonRankPanel, "TOPLEFT", 0, yOffset)
+		divider:SetPoint("TOPRIGHT", dungeonRankPanel, "TOPRIGHT", -4, yOffset)
+		divider:SetTexture("Interface\\Common\\UI-TooltipDivider")
+		return divider
+	end
+
 	local TIER_CHECK_FIRST_X = 62
 	local TIER_CHECK_SPACING = 60
 	local DUNGEON_TIERS = { { "normal", "Normal" }, { "heroic", "Heroic" }, { "mythic", "Mythic" } }
@@ -2014,6 +2032,8 @@ local function CreateMainFrame()
 	CreateTierCheckRow("dungeon", "Dungeons", -2, GW.IsDungeonRankTierEnabled, GW.SetDungeonRankTierEnabled, DUNGEON_TIERS)
 	CreateTierCheckRow("raid", "Raids", -24, GW.IsRaidRankTierEnabled, GW.SetRaidRankTierEnabled, RAID_TIERS)
 
+	CreateDivider(-44)
+
 	-- "Other Sources" - a quick on/off for Vendor and Reputation upgrades in
 	-- the out-of-instance ranking scan, separate from the finer-grained
 	-- per-item/per-faction settings in the Settings tab. Doesn't affect
@@ -2029,7 +2049,7 @@ local function CreateMainFrame()
 			if prevCheck then
 				check:SetPoint("LEFT", prevCheck, "RIGHT", TIER_CHECK_SPACING, 0)
 			else
-				check:SetPoint("TOPLEFT", TIER_CHECK_FIRST_X, -46)
+				check:SetPoint("TOPLEFT", TIER_CHECK_FIRST_X, -52)
 			end
 			check:SetChecked(GW.IsOtherSourceEnabled(source))
 			check:SetScript("OnClick", function(self)
@@ -2048,6 +2068,8 @@ local function CreateMainFrame()
 			prevCheck = check
 		end
 	end
+
+	CreateDivider(-72)
 
 	--------------------------------------------------------------------
 	-- Weapon baseline display - 3 independent slot icons (Two-Hand / Main
@@ -2073,7 +2095,7 @@ local function CreateMainFrame()
 			-- down to make room; see the anchor changes further down). A
 			-- little extra breathing room above so the row doesn't feel
 			-- cramped against the checkbox above it.
-			button:SetPoint("TOPLEFT", 0, -102)
+			button:SetPoint("TOPLEFT", 0, -108)
 		end
 
 		local lockIcon = button:CreateTexture(nil, "OVERLAY")
@@ -2087,6 +2109,8 @@ local function CreateMainFrame()
 		return button
 	end
 
+	CreateDivider(-100)
+
 	local weaponBaselineButtons = {}
 	local prevButton
 	for _, box in ipairs(WEAPON_BOX_ORDER) do
@@ -2096,11 +2120,15 @@ local function CreateMainFrame()
 		prevButton = button
 	end
 
+	-- To the right of the boxes rather than below them, to save vertical
+	-- space - shortened accordingly so it doesn't wrap past the row height.
 	local weaponBoxHint = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	weaponBoxHint:SetPoint("TOPLEFT", 0, -138)
-	weaponBoxHint:SetWidth(360)
+	weaponBoxHint:SetPoint("LEFT", weaponBaselineButtons["offHand"], "RIGHT", 12, 0)
+	weaponBoxHint:SetWidth(230)
 	weaponBoxHint:SetJustifyH("LEFT")
-	weaponBoxHint:SetText("Drag a weapon onto a box to set it as your reference (Two-Hand, Main-Hand, Off-Hand). Click a box to lock/unlock it - a locked box won't change when you re-equip.")
+	weaponBoxHint:SetText("Drag a weapon onto a box to set your reference. Click to lock/unlock - locked boxes won't change when you re-equip.")
+
+	CreateDivider(-146)
 
 	local function RefreshWeaponBaselineDisplay()
 		for _, box in ipairs(WEAPON_BOX_ORDER) do
@@ -2173,7 +2201,7 @@ local function CreateMainFrame()
 
 	local viewBySlotCheck = CreateFrame("CheckButton", nil, dungeonRankPanel, "UICheckButtonTemplate")
 	viewBySlotCheck:SetSize(18, 18)
-	viewBySlotCheck:SetPoint("TOPLEFT", 0, -68)
+	viewBySlotCheck:SetPoint("TOPLEFT", 0, -80)
 	viewBySlotCheck:SetChecked(dungeonRankViewMode == "slot")
 	viewBySlotCheck:SetScript("OnClick", function(self)
 		dungeonRankViewMode = self:GetChecked() and "slot" or "zone"
@@ -2189,20 +2217,20 @@ local function CreateMainFrame()
 	-- checkbox labels doesn't reliably fit once the window is resized narrow.
 	local dungeonRankRescan = CreateFrame("Button", nil, dungeonRankPanel, "UIPanelButtonTemplate")
 	dungeonRankRescan:SetSize(170, 20)
-	dungeonRankRescan:SetPoint("TOPLEFT", 0, -189)
-	dungeonRankRescan:SetText("Scan All Dungeons/Raids")
+	dungeonRankRescan:SetPoint("TOPLEFT", 0, -154)
+	dungeonRankRescan:SetText("Scan All Sources")
 	dungeonRankRescan:SetScript("OnClick", function()
 		GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
 		RefreshDungeonRankPanel()
 	end)
 
 	dungeonRankStatusText = dungeonRankPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -215)
+	dungeonRankStatusText:SetPoint("TOPLEFT", 2, -180)
 	dungeonRankStatusText:SetPoint("RIGHT", -2, 0)
 	dungeonRankStatusText:SetJustifyH("LEFT")
 
 	dungeonRankScrollFrame = CreateFrame("ScrollFrame", "GearWeightsDungeonRankScrollFrame", dungeonRankPanel, "UIPanelScrollFrameTemplate")
-	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -235)
+	dungeonRankScrollFrame:SetPoint("TOPLEFT", 2, -200)
 	dungeonRankScrollFrame:SetPoint("BOTTOMRIGHT", -34, 2)
 
 	dungeonRankContent = CreateFrame("Frame", nil, dungeonRankScrollFrame)
@@ -2528,7 +2556,7 @@ local function CreateMainFrame()
 	-- per-faction/per-standing control underneath it.
 	local REP_ROW_HEIGHT = 20
 	local reputationContent = CreateSettingsSection("reputations", "Reputations",
-		80 + #GW.REPUTATION_ZONE_LIST * REP_ROW_HEIGHT)
+		30 + #GW.REPUTATION_ZONE_LIST * REP_ROW_HEIGHT)
 
 	local reputationHint = reputationContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	reputationHint:SetPoint("TOPLEFT", 0, 0)
@@ -2536,41 +2564,11 @@ local function CreateMainFrame()
 	reputationHint:SetWidth(400)
 	reputationHint:SetJustifyH("LEFT")
 
-	local reputationTierChecks = {}
-	do
-		local prevCheck
-		for _, standing in ipairs(GW.REPUTATION_STANDING_ORDER) do
-			local check = CreateFrame("CheckButton", nil, reputationContent, "UICheckButtonTemplate")
-			check:SetSize(16, 16)
-			if prevCheck then
-				check:SetPoint("LEFT", prevCheck, "RIGHT", 75, 0)
-			else
-				check:SetPoint("TOPLEFT", reputationHint, "BOTTOMLEFT", 62, -8)
-			end
-			check:SetChecked(GW.IsReputationTierEnabled(standing))
-			check:SetScript("OnClick", function(self)
-				GW.SetReputationTierEnabled(standing, self:GetChecked() and true or false)
-				if RefreshDungeonRankPanel then RefreshDungeonRankPanel() end
-				GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
-			end)
-			local text = reputationContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-			text:SetPoint("LEFT", check, "RIGHT", 2, 0)
-			text:SetText(standing)
-			reputationTierChecks[standing] = check
-			if not prevCheck then
-				local label = reputationContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-				label:SetPoint("RIGHT", check, "LEFT", -4, 0)
-				label:SetText("Standing:")
-			end
-			prevCheck = check
-		end
-	end
-
 	local reputationFactionChecks = {}
 	for i, repZone in ipairs(GW.REPUTATION_ZONE_LIST) do
 		local check = CreateFrame("CheckButton", nil, reputationContent, "UICheckButtonTemplate")
 		check:SetSize(16, 16)
-		check:SetPoint("TOPLEFT", reputationHint, "BOTTOMLEFT", 0, -32 - (i - 1) * REP_ROW_HEIGHT)
+		check:SetPoint("TOPLEFT", reputationHint, "BOTTOMLEFT", 0, -20 - (i - 1) * REP_ROW_HEIGHT)
 		check:SetChecked(not GW.IsReputationFactionExcluded(repZone.key))
 		check:SetScript("OnClick", function(self)
 			GW.SetReputationFactionExcluded(repZone.key, not (self:GetChecked() and true or false))
@@ -2582,6 +2580,26 @@ local function CreateMainFrame()
 		text:SetWordWrap(false)
 		text:SetText(repZone.name)
 		reputationFactionChecks[repZone.key] = check
+	end
+
+	-- Standing tiers - a short vertical list to the right of the faction
+	-- column above, same layout idea as Armor Types next to Included Slots.
+	local REP_STANDING_COLUMN_X = 230
+	local reputationTierChecks = {}
+	for i, standing in ipairs(GW.REPUTATION_STANDING_ORDER) do
+		local check = CreateFrame("CheckButton", nil, reputationContent, "UICheckButtonTemplate")
+		check:SetSize(16, 16)
+		check:SetPoint("TOPLEFT", reputationHint, "BOTTOMLEFT", REP_STANDING_COLUMN_X, -20 - (i - 1) * REP_ROW_HEIGHT)
+		check:SetChecked(GW.IsReputationTierEnabled(standing))
+		check:SetScript("OnClick", function(self)
+			GW.SetReputationTierEnabled(standing, self:GetChecked() and true or false)
+			if RefreshDungeonRankPanel then RefreshDungeonRankPanel() end
+			GW.RunDungeonRankingScan(RefreshDungeonRankPanel)
+		end)
+		local text = reputationContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
+		text:SetText(standing)
+		reputationTierChecks[standing] = check
 	end
 
 	ReflowSettingsSections()
