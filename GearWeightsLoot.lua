@@ -405,7 +405,10 @@ GW.REPUTATION_ZONE_LIST = {
 	{ key = "Zandalar", name = "Zandalar Tribe" },
 	{ key = "Bloodsail", name = "Bloodsail Buccaneers" },
 	{ key = "Cenarion", name = "Cenarion Circle" },
-	{ key = "Hydraxian", name = "Hydraxian Waterlords" },
+	-- Hydraxian Waterlords rep is earned in Molten Core, which isn't
+	-- confirmed live on this server yet either - same treatment as Brood of
+	-- Nozdormu/Blackwing Lair above.
+	{ key = "Hydraxian", name = "Hydraxian Waterlords", available = false },
 	{ key = "DesolaceCentaurClans", name = "Desolace Centaur Clans" },
 	{ key = "Thorium", name = "Thorium Brotherhood" },
 	{ key = "Wintersaber", name = "Wintersaber Trainers" },
