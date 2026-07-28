@@ -797,6 +797,26 @@ function GW.SetGreedBindPromptEnabled(enabled)
 	GearWeightsDB.settings.promptGreedBindConfirm = enabled
 end
 
+-- Collapsible Settings-tab sections (Included Slots, Included Dungeons &
+-- Raids, and future ones like Reputations) remember whether they're
+-- collapsed, keyed by a short id string. Default (nothing saved yet) is
+-- expanded, matching how these sections have always displayed.
+function GW.IsSettingsSectionCollapsed(id)
+	EnsureLootSettings()
+	GearWeightsDB.settings.collapsedSections = GearWeightsDB.settings.collapsedSections or {}
+	return GearWeightsDB.settings.collapsedSections[id] == true
+end
+
+function GW.SetSettingsSectionCollapsed(id, collapsed)
+	EnsureLootSettings()
+	GearWeightsDB.settings.collapsedSections = GearWeightsDB.settings.collapsedSections or {}
+	if collapsed then
+		GearWeightsDB.settings.collapsedSections[id] = true
+	else
+		GearWeightsDB.settings.collapsedSections[id] = nil
+	end
+end
+
 --------------------------------------------------------------------------------
 -- Locked slots: "technically an upgrade by stat weight, but I've already
 -- decided I don't want to chase upgrades here" (set bonus, BiS trinket

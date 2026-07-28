@@ -2205,20 +2205,85 @@ local function CreateMainFrame()
 	-- up - only these checkboxes and the settings they controlled are
 	-- disabled, so the feature can be picked back up later without
 	-- rebuilding it from scratch.
-	local lockedSlotsHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	lockedSlotsHeader:SetPoint("TOPLEFT", promptGreedBindCheck, "BOTTOMLEFT", 0, -30)
-	lockedSlotsHeader:SetText("Included Slots")
 
-	local lockedSlotsHint = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	lockedSlotsHint:SetPoint("TOPLEFT", lockedSlotsHeader, "BOTTOMLEFT", 0, -2)
-	lockedSlotsHint:SetText("Checked slots are looked at for upgrades. Uncheck a slot (or Ctrl+click an upgrade item in the Instance Loot list) to stop - it's still scored, just never counted as an upgrade.")
-	lockedSlotsHint:SetWidth(370)
-	lockedSlotsHint:SetJustifyH("LEFT")
+	--------------------------------------------------------------------
+	-- Collapsible sections: a small header (title + expand/collapse arrow)
+	-- whose click shows/hides a content frame below it and persists the
+	-- state (GW.Is/SetSettingsSectionCollapsed) - default expanded. Adding
+	-- a future section (e.g. Reputations) just means calling
+	-- CreateSettingsSection and building into the returned content frame -
+	-- everything inside it must be PARENTED to that content frame (not
+	-- settingsContent directly), since hiding a parent frame hides its
+	-- children automatically and that's what makes collapsing work.
+	-- ReflowSettingsSections repositions every section's header/content
+	-- top-to-bottom based on which ones are currently expanded - called
+	-- once after all sections are built below, and again from inside
+	-- CreateSettingsSection whenever any one of them toggles.
+	--------------------------------------------------------------------
+	local SECTION_HEADER_HEIGHT = 20
+	local settingsSections = {}
+	local function ReflowSettingsSections()
+		local anchor, offset = promptGreedBindCheck, -30
+		for _, section in ipairs(settingsSections) do
+			section.header:ClearAllPoints()
+			section.header:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, offset)
+			if section.content:IsShown() then
+				anchor, offset = section.content, -20
+			else
+				anchor, offset = section.header, -20
+			end
+		end
+	end
+
+	local function CreateSettingsSection(id, title, contentHeight)
+		local header = CreateFrame("Button", nil, settingsContent)
+		header:SetSize(400, SECTION_HEADER_HEIGHT)
+
+		local arrow = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		arrow:SetPoint("LEFT", header, "LEFT", 0, 0)
+		arrow:SetWidth(14)
+		arrow:SetJustifyH("LEFT")
+
+		local titleText = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		titleText:SetPoint("LEFT", arrow, "RIGHT", 2, 0)
+		titleText:SetText(title)
+
+		local content = CreateFrame("Frame", nil, settingsContent)
+		content:SetSize(400, contentHeight)
+
+		local function Sync()
+			local collapsed = GW.IsSettingsSectionCollapsed(id)
+			arrow:SetText(collapsed and "[+]" or "[-]")
+			content:SetShown(not collapsed)
+		end
+		Sync()
+
+		header:SetScript("OnClick", function()
+			GW.SetSettingsSectionCollapsed(id, not GW.IsSettingsSectionCollapsed(id))
+			Sync()
+			ReflowSettingsSections()
+		end)
+		header:SetScript("OnEnter", function() titleText:SetFontObject("GameFontHighlight") end)
+		header:SetScript("OnLeave", function() titleText:SetFontObject("GameFontNormal") end)
+
+		table.insert(settingsSections, { header = header, content = content })
+		return content
+	end
 
 	-- Narrower than before (was 190) to leave room for the armor-type list
 	-- as a third column to the right, within the panel's fixed content width.
 	local LOCKED_SLOT_COL_WIDTH = 165
 	local LOCKED_SLOT_ROW_HEIGHT = 22
+	local includedSlotsRows = math.ceil(#GW.LOCKABLE_SLOT_ORDER / 2)
+	local includedSlotsContent = CreateSettingsSection("includedSlots", "Included Slots",
+		50 + includedSlotsRows * LOCKED_SLOT_ROW_HEIGHT)
+
+	local lockedSlotsHint = includedSlotsContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	lockedSlotsHint:SetPoint("TOPLEFT", 0, 0)
+	lockedSlotsHint:SetText("Checked slots are looked at for upgrades. Uncheck a slot (or Ctrl+click an upgrade item in the Instance Loot list) to stop - it's still scored, just never counted as an upgrade.")
+	lockedSlotsHint:SetWidth(370)
+	lockedSlotsHint:SetJustifyH("LEFT")
+
 	lockedSlotChecks = {}
 	for i, slotId in ipairs(GW.LOCKABLE_SLOT_ORDER) do
 		-- Column-major (fills the left column top-to-bottom, then the
@@ -2227,7 +2292,7 @@ local function CreateMainFrame()
 		-- ordered specifically for this per-column split.
 		local col = (i > GW.LOCKABLE_SLOT_LEFT_COUNT) and 1 or 0
 		local row = (col == 0) and (i - 1) or (i - 1 - GW.LOCKABLE_SLOT_LEFT_COUNT)
-		local check = CreateFrame("CheckButton", nil, settingsContent, "UICheckButtonTemplate")
+		local check = CreateFrame("CheckButton", nil, includedSlotsContent, "UICheckButtonTemplate")
 		check:SetSize(18, 18)
 		check:SetPoint("TOPLEFT", lockedSlotsHint, "BOTTOMLEFT", col * LOCKED_SLOT_COL_WIDTH, -20 - row * LOCKED_SLOT_ROW_HEIGHT)
 		-- Checked = included (the positive, whitelist framing) - the
@@ -2239,7 +2304,7 @@ local function CreateMainFrame()
 		check:SetScript("OnClick", function(self)
 			GW.SetSlotLocked(slotId, not (self:GetChecked() and true or false))
 		end)
-		local text = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		local text = includedSlotsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
 		text:SetText(GW.SLOT_LOCK_LABEL[slotId])
 		lockedSlotChecks[slotId] = check
@@ -2255,10 +2320,10 @@ local function CreateMainFrame()
 	local ARMOR_TYPE_COLUMN_X = 2 * LOCKED_SLOT_COL_WIDTH
 	local armorTypeChecks = {}
 	for i, armorType in ipairs(GW.ARMOR_TYPE_ORDER) do
-		local check = CreateFrame("CheckButton", nil, settingsContent, "UICheckButtonTemplate")
+		local check = CreateFrame("CheckButton", nil, includedSlotsContent, "UICheckButtonTemplate")
 		check:SetSize(18, 18)
 		check:SetPoint("TOPLEFT", lockedSlotsHint, "BOTTOMLEFT", ARMOR_TYPE_COLUMN_X, -20 - (i - 1) * LOCKED_SLOT_ROW_HEIGHT)
-		local text = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		local text = includedSlotsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
 		text:SetText(armorType)
 
@@ -2274,7 +2339,7 @@ local function CreateMainFrame()
 			-- FontStrings can't take mouse scripts directly, so a small
 			-- invisible hitbox frame spans both the checkbox and label to
 			-- make the whole line hoverable, not just the checkbox itself.
-			local hitbox = CreateFrame("Frame", nil, settingsContent)
+			local hitbox = CreateFrame("Frame", nil, includedSlotsContent)
 			hitbox:SetPoint("TOPLEFT", check, "TOPLEFT", 0, 0)
 			hitbox:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 0, 0)
 			hitbox:EnableMouse(true)
@@ -2298,19 +2363,6 @@ local function CreateMainFrame()
 	-- currently just "World Bosses" until more raids go live on this server
 	-- (see RAID_ZONE_KEY_WHITELIST, GearWeightsLoot.lua), but built to scale
 	-- as more get added rather than needing to be redone later.
-	local includedSlotsRows = math.ceil(#GW.LOCKABLE_SLOT_ORDER / 2)
-	local zoneFilterHeaderY = -20 - includedSlotsRows * LOCKED_SLOT_ROW_HEIGHT - 14
-
-	local zoneFilterHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	zoneFilterHeader:SetPoint("TOPLEFT", lockedSlotsHint, "BOTTOMLEFT", 0, zoneFilterHeaderY)
-	zoneFilterHeader:SetText("Included Dungeons & Raids")
-
-	local zoneFilterHint = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	zoneFilterHint:SetPoint("TOPLEFT", zoneFilterHeader, "BOTTOMLEFT", 0, -2)
-	zoneFilterHint:SetText("Checked zones are reported on by the out-of-instance ranking scan. Uncheck a zone to stop seeing it there - walking into it in person still shows its upgrades as normal.")
-	zoneFilterHint:SetWidth(400)
-	zoneFilterHint:SetJustifyH("LEFT")
-
 	local trackedZones = GW.GetTrackedZoneList()
 	local dungeonZones, raidZones = {}, {}
 	for _, zone in ipairs(trackedZones) do
@@ -2326,22 +2378,31 @@ local function CreateMainFrame()
 	local ZONE_RAID_START_X = 230
 	local ZONE_ROW_HEIGHT = 20
 	local ZONE_ROWS_START_Y = -24
+	local maxZoneRows = math.max(#dungeonZones, #raidZones, 1)
+	local zoneFilterContent = CreateSettingsSection("includedZones", "Included Dungeons & Raids",
+		70 + maxZoneRows * ZONE_ROW_HEIGHT)
 
-	local dungeonZoneLabel = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	local zoneFilterHint = zoneFilterContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	zoneFilterHint:SetPoint("TOPLEFT", 0, 0)
+	zoneFilterHint:SetText("Checked zones are reported on by the out-of-instance ranking scan. Uncheck a zone to stop seeing it there - walking into it in person still shows its upgrades as normal.")
+	zoneFilterHint:SetWidth(400)
+	zoneFilterHint:SetJustifyH("LEFT")
+
+	local dungeonZoneLabel = zoneFilterContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	dungeonZoneLabel:SetPoint("TOPLEFT", zoneFilterHint, "BOTTOMLEFT", 0, -8)
 	dungeonZoneLabel:SetText("Dungeons")
 
-	local raidZoneLabel = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	local raidZoneLabel = zoneFilterContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	raidZoneLabel:SetPoint("TOPLEFT", zoneFilterHint, "BOTTOMLEFT", ZONE_RAID_START_X, -8)
 	raidZoneLabel:SetText("Raids")
 
 	local zoneFilterChecks = {}
 	local function CreateZoneCheckColumn(zones, startX)
 		for i, zone in ipairs(zones) do
-			local check = CreateFrame("CheckButton", nil, settingsContent, "UICheckButtonTemplate")
+			local check = CreateFrame("CheckButton", nil, zoneFilterContent, "UICheckButtonTemplate")
 			check:SetSize(16, 16)
 			check:SetPoint("TOPLEFT", zoneFilterHint, "BOTTOMLEFT", startX, ZONE_ROWS_START_Y - (i - 1) * ZONE_ROW_HEIGHT)
-			local text = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			local text = zoneFilterContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 			text:SetPoint("LEFT", check, "RIGHT", 2, 0)
 			text:SetWordWrap(false)
 			text:SetText(zone.name)
@@ -2360,7 +2421,7 @@ local function CreateMainFrame()
 				check:SetChecked(true)
 				check:Disable()
 				text:SetFontObject("GameFontDisableSmall")
-				local hitbox = CreateFrame("Frame", nil, settingsContent)
+				local hitbox = CreateFrame("Frame", nil, zoneFilterContent)
 				hitbox:SetPoint("TOPLEFT", check, "TOPLEFT", 0, 0)
 				hitbox:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 0, 0)
 				hitbox:EnableMouse(true)
@@ -2378,6 +2439,8 @@ local function CreateMainFrame()
 
 	CreateZoneCheckColumn(dungeonZones, 0)
 	CreateZoneCheckColumn(raidZones, ZONE_RAID_START_X)
+
+	ReflowSettingsSections()
 
 	return f
 end
