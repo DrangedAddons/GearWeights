@@ -358,6 +358,63 @@ local function IsRelicUsable(itemLink)
 	return true
 end
 
+-- Reputation-gated items (Settings tab's Reputations category) carry an
+-- explicit "Requires <Faction> - <Standing>" red line in their own tooltip
+-- text (e.g. "Requires Argent Dawn - Exalted") - read directly from there
+-- rather than trying to infer the required standing from AtlasLoot's own
+-- organization, which varies wildly between factions (see
+-- REPUTATION_ZONE_LIST, GearWeightsLoot.lua - some list Friendly/Honored/
+-- Revered/Exalted as top-level "boss" names, some as section headers, some
+-- not at all). This also naturally skips anything AtlasLoot lists under a
+-- faction's page that isn't actually reputation-gated, since such an item
+-- simply won't have this line at all.
+local reputationRequirementCache = {}
+local reputationScanTip
+function GW.GetItemReputationRequirement(itemLink)
+	if not itemLink then return nil end
+	local cached = reputationRequirementCache[itemLink]
+	if cached ~= nil then
+		if cached == false then return nil end
+		return cached.factionName, cached.standing
+	end
+
+	if not reputationScanTip then
+		reputationScanTip = CreateFrame("GameTooltip", "GearWeightsReputationScanTooltip", nil, "GameTooltipTemplate")
+		reputationScanTip:SetOwner(UIParent, "ANCHOR_NONE")
+	end
+	reputationScanTip:ClearLines()
+	local ok = pcall(reputationScanTip.SetHyperlink, reputationScanTip, itemLink)
+	if not ok then
+		reputationRequirementCache[itemLink] = false
+		return nil
+	end
+
+	local factionName, standing
+	for i = 1, reputationScanTip:NumLines() do
+		local fs = _G["GearWeightsReputationScanTooltipTextLeft" .. i]
+		local text = fs and fs:GetText()
+		if text then
+			local matchedFaction, matchedStanding = text:match("^Requires (.+) %- (%a+)$")
+			if matchedFaction and matchedStanding then
+				for _, validStanding in ipairs(GW.REPUTATION_STANDING_ORDER) do
+					if validStanding == matchedStanding then
+						factionName, standing = matchedFaction, matchedStanding
+						break
+					end
+				end
+			end
+		end
+		if factionName then break end
+	end
+
+	if factionName then
+		reputationRequirementCache[itemLink] = { factionName = factionName, standing = standing }
+	else
+		reputationRequirementCache[itemLink] = false
+	end
+	return factionName, standing
+end
+
 -- Unique-Equipped isn't exposed by GetItemStats()/GetItemInfo() at all, so
 -- this is the other case that needs a real tooltip scan. Returns the max
 -- number of copies of this exact item that can be equipped at once (1 for

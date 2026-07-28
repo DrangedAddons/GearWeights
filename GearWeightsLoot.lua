@@ -372,6 +372,44 @@ local DUNGEON_ZONE_DISPLAY_ORDER = {
 	"The Stockade", "Stratholme", "Sunken Temple", "Uldaman",
 	"Wailing Caverns", "Zul'Farrak",
 }
+-- Reputation factions (classic only, per request - Wrath/TBC ones like
+-- Argent Tournament, Argent Crusade, Cenarion Expedition are out of scope).
+-- Matched by AtlasLoot_Data KEY specifically, not display name - confirmed
+-- via /gw repdiag that Alterac Valley and Arathi Basin each have a SECOND,
+-- unrelated AtlasLoot key (honor-rank/misc BG rewards, not reputation-gated
+-- at all) sharing the exact same Name as their real reputation-faction key,
+-- so matching by name alone would wrongly pull in unrelated content.
+--
+-- Unlike dungeons/raids, these have no consistent internal tier structure
+-- to rely on - Friendly/Honored/Revered/Exalted sometimes show up as
+-- top-level "boss" names (Argent Dawn), sometimes as section mode-headers
+-- (Hydraxian Waterlords), sometimes not at all (Wintersaber Trainers has a
+-- single item with no tier markers whatsoever). So the actual required
+-- standing is read straight from each item's own tooltip
+-- (GW.GetItemReputationRequirement) instead of trusting AtlasLoot's
+-- organization - the same "Requires Argent Dawn - Exalted" red line shown
+-- on the item itself, which is also what naturally excludes anything that
+-- isn't actually reputation-gated despite AtlasLoot listing it here.
+-- GW-namespaced (not a bare local) since GearWeightsUI.lua's Settings tab
+-- needs it too, to build the per-faction checklist.
+GW.REPUTATION_ZONE_LIST = {
+	{ key = "Argent", name = "Argent Dawn" },
+	{ key = "AQBroodRings", name = "Brood of Nozdormu" },
+	{ key = "AlteracFactions", name = "Alterac Valley" },
+	{ key = "ArathiBasinFactions", name = "Arathi Basin" },
+	{ key = "Timbermaw", name = "Timbermaw Hold" },
+	{ key = "Zandalar", name = "Zandalar Tribe" },
+	{ key = "Bloodsail", name = "Bloodsail Buccaneers" },
+	{ key = "Cenarion", name = "Cenarion Circle" },
+	{ key = "Hydraxian", name = "Hydraxian Waterlords" },
+	{ key = "DesolaceCentaurClans", name = "Desolace Centaur Clans" },
+	{ key = "Thorium", name = "Thorium Brotherhood" },
+	{ key = "Wintersaber", name = "Wintersaber Trainers" },
+}
+-- GW-namespaced (not a bare local) since GW.GetItemReputationRequirement in
+-- GearWeights.lua needs it too, and GearWeights.lua loads before this file.
+GW.REPUTATION_STANDING_ORDER = { "Friendly", "Honored", "Revered", "Exalted" }
+
 local ZONE_DISPLAY_ORDER_INDEX = { dungeon = {}, raid = {} }
 for i, name in ipairs(DUNGEON_ZONE_DISPLAY_ORDER) do ZONE_DISPLAY_ORDER_INDEX.dungeon[name] = i end
 for i, name in ipairs(RAID_ZONE_DISPLAY_ORDER) do ZONE_DISPLAY_ORDER_INDEX.raid[name] = i end
@@ -450,7 +488,8 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 	local resultByKey = {}
 	for key, data in pairs(AtlasLoot_Data) do
 		local category = ClassifyZoneCategory(key, data)
-		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] and not EXCLUDED_ZONE_NAMES[data.Name] and IsZoneAvailable(category, data.Name) and not GW.IsZoneExcluded(key) then
+		local sourceEnabled = (category ~= "vendor") or GW.IsOtherSourceEnabled("vendor")
+		if category and data.Name and not EXCLUDED_ZONE_KEYS[key] and not EXCLUDED_ZONE_NAMES[data.Name] and IsZoneAvailable(category, data.Name) and not GW.IsZoneExcluded(key) and sourceEnabled then
 			table.insert(zones, { key = key, data = data, category = category })
 			resultByKey[key] = { zoneKey = key, zoneName = data.Name, category = category, normal = 0, heroic = 0, mythic = 0, ascended = 0, total = 0, items = {} }
 		end
@@ -513,6 +552,118 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 					result[work.tier] = result[work.tier] + 1
 					result.total = result.total + 1
 					table.insert(result.items, { itemLink = itemLink, score = score, diff = diff, tier = work.tier, bossName = work.bossName, flipsLoadout = flipsLoadout })
+				end
+			end
+			i = i + 1
+			processed = processed + 1
+		end
+
+		if onProgress then onProgress(i - 1, total) end
+
+		if i > total then
+			self:SetScript("OnUpdate", nil)
+			local results = {}
+			for _, result in pairs(resultByKey) do
+				if result.total > 0 then table.insert(results, result) end
+			end
+			table.sort(results, function(a, b) return a.total > b.total end)
+			onComplete(results)
+		end
+	end)
+end
+
+--------------------------------------------------------------------------------
+-- Reputation-gated items (Settings tab's Reputations category). Structurally
+-- very different from the dungeon/raid scan above: there's no consistent
+-- Normal/Heroic-style section-matching to rely on (see REPUTATION_ZONE_LIST's
+-- comment), and items aren't difficulty-scaled at all (no
+-- GetItemDifficultyID step - a stock item ID resolves directly), so instead
+-- of reusing that work queue shape, every item under a tracked faction is
+-- flattened and resolved up front, then GW.GetItemReputationRequirement
+-- (tooltip scan) determines its real faction + standing after the fact.
+--------------------------------------------------------------------------------
+
+-- Every faction reputation known to the player's own character (their
+-- actual reputation pane, via the client's own API - already filtered to
+-- what that character's faction/starting choices can ever interact with),
+-- so a reputation-gated item for a faction this character could never earn
+-- (e.g. an Alliance-only reputation on a Horde character) isn't reported as
+-- a real upgrade opportunity - same idea as GW.IsItemUsable excluding gear
+-- a class has no proficiency for.
+local function GetKnownFactionNames()
+	local known = {}
+	for i = 1, GetNumFactions() do
+		local name, _, _, _, _, _, _, _, isHeader = GetFactionInfo(i)
+		if name and not isHeader then known[name] = true end
+	end
+	return known
+end
+
+-- onProgress(processedCount, totalCount) - called periodically during the scan.
+-- onComplete(results) - results: array of
+--   { zoneKey, zoneName, category = "reputation", Friendly=N, Honored=N, Revered=N, Exalted=N,
+--     total=N, items = { { itemLink, score, diff, tier = standing, bossName = factionName }, ... } }
+function GW.BuildReputationRankingList(onProgress, onComplete)
+	EnsureAtlasLootModulesLoaded()
+
+	if not AtlasLoot_Data or not GW.IsOtherSourceEnabled("reputation") then
+		onComplete({})
+		return
+	end
+
+	local knownFactions = GetKnownFactionNames()
+
+	local workQueue = {}
+	local resultByKey = {}
+	for _, repZone in ipairs(GW.REPUTATION_ZONE_LIST) do
+		local data = AtlasLoot_Data[repZone.key]
+		if data and not GW.IsReputationFactionExcluded(repZone.key) then
+			resultByKey[repZone.key] = {
+				zoneKey = repZone.key, zoneName = repZone.name, category = "reputation",
+				Friendly = 0, Honored = 0, Revered = 0, Exalted = 0, total = 0, items = {},
+			}
+			for _, boss in ipairs(data) do
+				for _, section in ipairs(boss) do
+					for _, entry in ipairs(section) do
+						if entry and entry.itemID then
+							table.insert(workQueue, { zoneKey = repZone.key, stockItemId = entry.itemID })
+						end
+					end
+				end
+			end
+		end
+	end
+
+	local total = #workQueue
+	local i = 1
+	-- Some factions list the same item more than once (e.g. Cenarion
+	-- Circle's token turn-ins alongside its direct vendor list) - dedup per
+	-- faction so it isn't double-counted.
+	local seenItemsByZone = {}
+	local worker = CreateFrame("Frame")
+	worker:SetScript("OnUpdate", function(self)
+		local processed = 0
+		while i <= total and processed < RANKING_BATCH_SIZE do
+			local work = workQueue[i]
+			local itemLink = select(2, GetItemInfo(work.stockItemId))
+			if itemLink then
+				local zoneSeen = seenItemsByZone[work.zoneKey]
+				if not zoneSeen then
+					zoneSeen = {}
+					seenItemsByZone[work.zoneKey] = zoneSeen
+				end
+				if not zoneSeen[itemLink] then
+					zoneSeen[itemLink] = true
+					local factionName, standing = GW.GetItemReputationRequirement(itemLink)
+					if factionName and standing and knownFactions[factionName] and GW.IsReputationTierEnabled(standing) then
+						local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
+						if usable ~= false and diff and diff > 0.05 then
+							local result = resultByKey[work.zoneKey]
+							result[standing] = result[standing] + 1
+							result.total = result.total + 1
+							table.insert(result.items, { itemLink = itemLink, score = score, diff = diff, tier = standing, bossName = factionName })
+						end
+					end
 				end
 			end
 			i = i + 1
@@ -652,6 +803,29 @@ local function EnsureLootSettings()
 	if GearWeightsDB.settings.raidRankAscended == nil then
 		GearWeightsDB.settings.raidRankAscended = true
 	end
+	-- Reputation standing tiers (Friendly/Honored/Revered/Exalted) - same
+	-- whitelist framing as everything else, all included by default.
+	if GearWeightsDB.settings.repRankFriendly == nil then
+		GearWeightsDB.settings.repRankFriendly = true
+	end
+	if GearWeightsDB.settings.repRankHonored == nil then
+		GearWeightsDB.settings.repRankHonored = true
+	end
+	if GearWeightsDB.settings.repRankRevered == nil then
+		GearWeightsDB.settings.repRankRevered = true
+	end
+	if GearWeightsDB.settings.repRankExalted == nil then
+		GearWeightsDB.settings.repRankExalted = true
+	end
+	-- "Other Sources" quick toggles (Instance Loot tab, below Dungeons/Raids) -
+	-- a coarse on/off for Vendor and Reputation upgrades in the ranking scan,
+	-- separate from the finer-grained per-faction checklist in Settings.
+	if GearWeightsDB.settings.otherSourceVendor == nil then
+		GearWeightsDB.settings.otherSourceVendor = true
+	end
+	if GearWeightsDB.settings.otherSourceReputation == nil then
+		GearWeightsDB.settings.otherSourceReputation = true
+	end
 end
 
 function GW.IsDungeonRankTierEnabled(tier)
@@ -685,6 +859,58 @@ function GW.SetRaidRankTierEnabled(tier, enabled)
 	elseif tier == "heroic" then GearWeightsDB.settings.raidRankHeroic = enabled
 	elseif tier == "mythic" then GearWeightsDB.settings.raidRankMythic = enabled
 	elseif tier == "ascended" then GearWeightsDB.settings.raidRankAscended = enabled
+	end
+end
+
+function GW.IsReputationTierEnabled(standing)
+	EnsureLootSettings()
+	if standing == "Friendly" then return GearWeightsDB.settings.repRankFriendly end
+	if standing == "Honored" then return GearWeightsDB.settings.repRankHonored end
+	if standing == "Revered" then return GearWeightsDB.settings.repRankRevered end
+	if standing == "Exalted" then return GearWeightsDB.settings.repRankExalted end
+	return false
+end
+
+function GW.SetReputationTierEnabled(standing, enabled)
+	EnsureLootSettings()
+	if standing == "Friendly" then GearWeightsDB.settings.repRankFriendly = enabled
+	elseif standing == "Honored" then GearWeightsDB.settings.repRankHonored = enabled
+	elseif standing == "Revered" then GearWeightsDB.settings.repRankRevered = enabled
+	elseif standing == "Exalted" then GearWeightsDB.settings.repRankExalted = enabled
+	end
+end
+
+-- Per-faction whitelist (Settings tab's Reputations checklist), matched by
+-- REPUTATION_ZONE_LIST's key - same "still shown, not counted" philosophy
+-- as GW.IsZoneExcluded.
+function GW.IsReputationFactionExcluded(factionKey)
+	EnsureLootSettings()
+	GearWeightsDB.settings.excludedReputationFactions = GearWeightsDB.settings.excludedReputationFactions or {}
+	return GearWeightsDB.settings.excludedReputationFactions[factionKey] == true
+end
+
+function GW.SetReputationFactionExcluded(factionKey, excluded)
+	EnsureLootSettings()
+	GearWeightsDB.settings.excludedReputationFactions = GearWeightsDB.settings.excludedReputationFactions or {}
+	if excluded then
+		GearWeightsDB.settings.excludedReputationFactions[factionKey] = true
+	else
+		GearWeightsDB.settings.excludedReputationFactions[factionKey] = nil
+	end
+end
+
+-- "Other Sources" quick toggles - source is "vendor" or "reputation".
+function GW.IsOtherSourceEnabled(source)
+	EnsureLootSettings()
+	if source == "vendor" then return GearWeightsDB.settings.otherSourceVendor end
+	if source == "reputation" then return GearWeightsDB.settings.otherSourceReputation end
+	return false
+end
+
+function GW.SetOtherSourceEnabled(source, enabled)
+	EnsureLootSettings()
+	if source == "vendor" then GearWeightsDB.settings.otherSourceVendor = enabled
+	elseif source == "reputation" then GearWeightsDB.settings.otherSourceReputation = enabled
 	end
 end
 
@@ -1169,10 +1395,24 @@ function GW.RunDungeonRankingScan(onComplete)
 	GW.BuildDungeonRankingList(options, function(processed, total)
 		dungeonRankScanState.processed = processed
 		dungeonRankScanState.total = total
-	end, function(results)
-		dungeonRankScanState.inProgress = false
-		GW.SetCachedDungeonRanking(results, GW.GetCurrentSpecId and GW.GetCurrentSpecId())
-		if onComplete then onComplete(results) end
+	end, function(dungeonResults)
+		-- Reputation is a separate pass (see GW.BuildReputationRankingList's
+		-- header comment for why it can't share the dungeon/raid work queue),
+		-- run right after and merged into the same cached results list so the
+		-- UI renders it exactly like any other category.
+		GW.BuildReputationRankingList(function(processed, total)
+			dungeonRankScanState.processed = processed
+			dungeonRankScanState.total = total
+		end, function(reputationResults)
+			dungeonRankScanState.inProgress = false
+			local results = dungeonResults
+			for _, result in ipairs(reputationResults) do
+				table.insert(results, result)
+			end
+			table.sort(results, function(a, b) return a.total > b.total end)
+			GW.SetCachedDungeonRanking(results, GW.GetCurrentSpecId and GW.GetCurrentSpecId())
+			if onComplete then onComplete(results) end
+		end)
 	end)
 	return true
 end
