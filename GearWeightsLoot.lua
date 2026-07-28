@@ -323,10 +323,33 @@ local function ClassifyZoneCategory(key, data)
 	return category
 end
 
+-- Matches AtlasLoot's own "Select Category" menu order (Raids, then
+-- Dungeons), by zone name rather than key - AtlasLoot's real display order
+-- lives in its own UI code, not in any field on AtlasLoot_Data itself, so
+-- this is a manually copied list rather than something read off the data.
+-- Anything not listed here (shouldn't normally happen for real dungeons/
+-- raids) sorts after everything listed, alphabetically among itself.
+local RAID_ZONE_DISPLAY_ORDER = {
+	"Zul'Gurub", "Molten Core", "Onyxia's Lair", "Blackwing Lair",
+	"Ruins of Ahn'Qiraj", "Temple of Ahn'Qiraj", "Naxxramas", "World Bosses",
+}
+local DUNGEON_ZONE_DISPLAY_ORDER = {
+	"Blackfathom Deeps", "Blackrock Depths", "Blackrock Caverns",
+	"Lower Blackrock Spire", "Upper Blackrock Spire", "The Deadmines",
+	"Dire Maul North", "Dire Maul East", "Dire Maul West", "Gnomeregan",
+	"The Karazhan Crypts", "Maraudon", "Ragefire Chasm", "Razorfen Downs",
+	"Razorfen Kraul", "Scarlet Monastery", "Scholomance", "Shadowfang Keep",
+	"The Stockade", "Stratholme", "Sunken Temple", "Uldaman",
+	"Wailing Caverns", "Zul'Farrak",
+}
+local ZONE_DISPLAY_ORDER_INDEX = { dungeon = {}, raid = {} }
+for i, name in ipairs(DUNGEON_ZONE_DISPLAY_ORDER) do ZONE_DISPLAY_ORDER_INDEX.dungeon[name] = i end
+for i, name in ipairs(RAID_ZONE_DISPLAY_ORDER) do ZONE_DISPLAY_ORDER_INDEX.raid[name] = i end
+
 -- Every zone GW.BuildDungeonRankingList would ever consider (regardless of
 -- current tier/zone-exclusion settings), for the Settings tab's zone
--- checklist to enumerate - sorted by category then name so the checklist
--- reads alphabetically within Dungeons/Raids.
+-- checklist to enumerate - sorted by category, then AtlasLoot's own menu
+-- order within each category.
 function GW.GetTrackedZoneList()
 	EnsureAtlasLootModulesLoaded()
 	if not AtlasLoot_Data then return {} end
@@ -339,6 +362,9 @@ function GW.GetTrackedZoneList()
 	end
 	table.sort(zones, function(a, b)
 		if a.category ~= b.category then return a.category < b.category end
+		local order = ZONE_DISPLAY_ORDER_INDEX[a.category] or {}
+		local rankA, rankB = order[a.name] or math.huge, order[b.name] or math.huge
+		if rankA ~= rankB then return rankA < rankB end
 		return a.name < b.name
 	end)
 	return zones

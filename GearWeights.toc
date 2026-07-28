@@ -1,7 +1,7 @@
 ## Interface: 30300
 ## Title: GearWeights
 ## Notes: Custom stat-weight gear scoring, tied to your active Ascension specialization. Uses GetItemStats() for reliable detection on custom items instead of tooltip text parsing.
-## Version: 1.26.18
+## Version: 1.26.19
 ## Author: Confuciussay
 ## SavedVariables: GearWeightsDB
 ## OptionalDeps: AtlasLoot, AtlasLoot_WrathoftheLichKing, AtlasLoot_Cache
