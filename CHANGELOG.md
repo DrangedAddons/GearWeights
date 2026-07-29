@@ -22,7 +22,13 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.42 - 2026-07-29
+## v1.26.43 - 2026-07-29
+
+### Fixes
+- Fixed the Greed-roll Bind-on-Pickup bypass ("Prompt to accept BoP when Greed looting", unticked) never actually suppressing the confirmation popup - `LOOT_ROLL_TYPE_GREED` is nil on this server's client even though the roll type value itself arrives normally, so the comparison silently always failed. Now falls back to the standard numeric value when the named constant isn't defined.
+
+<details>
+<summary>v1.26.42 - 2026-07-29</summary>
 
 ### New: Reputation-gated items (Settings tab: Reputations)
 - Added Reputations as a new upgrade category alongside Dungeons/Raids/Vendor, covering all 12 classic reputation factions (Argent Dawn, Alterac Valley, Arathi Basin, Timbermaw Hold, Zandalar Tribe, Bloodsail Buccaneers, Cenarion Circle, Hydraxian Waterlords, Desolace Centaur Clans, Thorium Brotherhood, Wintersaber Trainers, Brood of Nozdormu).
@@ -47,7 +53,9 @@ the actual section further down):
 - The Two-Hand/Main-Hand/Off-Hand reference boxes are now tracked per-spec instead of sharing one set - since this is a classless/hybrid-class server, switching spec often means switching to a completely different weapon. Existing tracked weapons migrate automatically into your active spec on first load of this version.
 
 ### Known issue
-- The Greed-roll Bind-on-Pickup bypass ("Prompt to accept BoP when Greed looting", unticked) isn't currently suppressing the confirmation popup - under active investigation; this build includes temporary debug chat output to help diagnose it.
+- The Greed-roll Bind-on-Pickup bypass ("Prompt to accept BoP when Greed looting", unticked) isn't currently suppressing the confirmation popup - under active investigation; this build includes temporary debug chat output to help diagnose it. (Fixed in v1.26.43, see above.)
+
+</details>
 
 <details>
 <summary>v1.26.22 - 2026-07-28</summary>
