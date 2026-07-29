@@ -22,7 +22,35 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.22 - 2026-07-28
+## v1.26.42 - 2026-07-29
+
+### New: Reputation-gated items (Settings tab: Reputations)
+- Added Reputations as a new upgrade category alongside Dungeons/Raids/Vendor, covering all 12 classic reputation factions (Argent Dawn, Alterac Valley, Arathi Basin, Timbermaw Hold, Zandalar Tribe, Bloodsail Buccaneers, Cenarion Circle, Hydraxian Waterlords, Desolace Centaur Clans, Thorium Brotherhood, Wintersaber Trainers, Brood of Nozdormu).
+- Standing is read directly off each item's own tooltip ("Requires \<Faction\> - \<Standing\>"), shown next to the item as just the standing (e.g. "Exalted") since the faction is already implied by the section it's listed under.
+- A handful of items that carry no tooltip requirement line at all (Alterac Valley's insignia rank rewards, Bloodsail Buccaneers' costume set, Cenarion Circle's badge-purchased rewards, Desolace's Gelkis/Magram items) are handled through a small hardcoded standing table, verified faction-by-faction against real game data.
+- Added a "Neutral" standing tier (below Friendly) for items that only require a quest, no rep threshold.
+- Reputation upgrades are no longer gated by whether that reputation is currently visible in your own reputation pane - most classic reps stay hidden until an unlock quest is done, but this now surfaces "worth going to earn" upgrades regardless, only excluding genuinely Alliance/Horde-locked factions (Stormpike Guard vs. Frostwolf Clan).
+- Brood of Nozdormu and Hydraxian Waterlords are listed but greyed out and excluded from scanning - both are earned in raids (Blackwing Lair, Molten Core) not yet confirmed live on this server.
+- Added a per-faction/per-standing checklist to the Settings tab, and a coarse "Other Sources: Reputations" toggle next to Vendors on the Instance Loot tab.
+- Reputation scanning piggybacks on the existing login auto-scan and caches its tooltip results in memory for the session, so there's no added per-item cost during normal play.
+
+### Settings tab: collapsible sections
+- Included Slots, Included Dungeons & Raids, and the new Reputations checklist are now collapsible (click the header to expand/collapse), instead of one long scroll.
+
+### Instance Loot tab: layout polish
+- Added WoW-style divider lines between source-toggle groups - a subtle line between closely-related rows (e.g. Raids/Other Sources), a brighter one between bigger conceptual sections (Other Sources/View by Slot, and around the weapon boxes).
+- Moved the weapon box help text to the right of the boxes instead of below, to save vertical space.
+- Renamed the rescan button to "Scan All Sources" to reflect the broader set of sources it now covers.
+- Made the main window background more opaque.
+
+### Weapon Baseline Tracking
+- The Two-Hand/Main-Hand/Off-Hand reference boxes are now tracked per-spec instead of sharing one set - since this is a classless/hybrid-class server, switching spec often means switching to a completely different weapon. Existing tracked weapons migrate automatically into your active spec on first load of this version.
+
+### Known issue
+- The Greed-roll Bind-on-Pickup bypass ("Prompt to accept BoP when Greed looting", unticked) isn't currently suppressing the confirmation popup - under active investigation; this build includes temporary debug chat output to help diagnose it.
+
+<details>
+<summary>v1.26.22 - 2026-07-28</summary>
 
 ### New: Included Slots / Armor Types / Included Dungeons & Raids (Settings tab)
 - "Locked Slots" renamed to "Included Slots" and flipped to a positive whitelist: every slot is checked (included) by default, and you uncheck a slot to stop counting upgrades there - reads as a positive confirmation instead of confirming a negative. Reordered into two columns matching the character pane's paperdoll layout.
@@ -35,6 +63,8 @@ the actual section further down):
 ### Fixes
 - Fixed the main window not appearing at all after an unrelated Settings change reinterpreted a saved window position under a different coordinate scheme.
 - Fixed a crash on `/gw` caused by a new Settings function being defined before a helper it depended on (a recurring Lua scoping gotcha in this codebase - see CLAUDE.md-adjacent notes if this bites again).
+
+</details>
 
 <details>
 <summary>v1.26.11 - 2026-07-27</summary>
