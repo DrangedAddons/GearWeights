@@ -532,6 +532,43 @@ local function EnsureDB()
 	GearWeightsDB.profiles = GearWeightsDB.profiles or {}
 	GearWeightsDB.knownStats = GearWeightsDB.knownStats or {}
 	GearWeightsDB.pendingImports = GearWeightsDB.pendingImports or {}
+
+	-- Pre-1.26.44 versions kept profiles/pendingImports keyed only by specId,
+	-- shared account-wide - so two different characters landing on the same
+	-- numeric spec slot silently saw each other's stat weights. Detected by a
+	-- numeric specId key sitting directly under profiles/pendingImports
+	-- instead of under a characterKey layer; migrated into the currently
+	-- active character's own bucket the first time this runs after
+	-- upgrading - whichever character loads first keeps the existing data,
+	-- every other character starts fresh (same reasoning as the weapon
+	-- baseline's own migrations).
+	local isLegacyProfiles = false
+	for key in pairs(GearWeightsDB.profiles) do
+		if type(key) == "number" then isLegacyProfiles = true; break end
+	end
+	if isLegacyProfiles then
+		local legacy = GearWeightsDB.profiles
+		GearWeightsDB.profiles = { [GW.GetCurrentCharacterKey()] = legacy }
+	end
+
+	local isLegacyPending = false
+	for key in pairs(GearWeightsDB.pendingImports) do
+		if type(key) == "number" then isLegacyPending = true; break end
+	end
+	if isLegacyPending then
+		local legacy = GearWeightsDB.pendingImports
+		GearWeightsDB.pendingImports = { [GW.GetCurrentCharacterKey()] = legacy }
+	end
+end
+
+-- "CharacterName-RealmName" - used to scope stat-weight profiles and the
+-- weapon baseline per-character (nested under per-spec), since two different
+-- characters can otherwise land on the same numeric spec slot and would
+-- silently share data without this.
+function GW.GetCurrentCharacterKey()
+	local name = UnitName("player") or "Unknown"
+	local realm = GetRealmName() or "Unknown"
+	return name .. "-" .. realm
 end
 
 function GW.GetCurrentSpecId()
@@ -554,9 +591,11 @@ end
 
 function GW.GetActiveProfile()
 	EnsureDB()
+	local charKey = GW.GetCurrentCharacterKey()
 	local specId = GW.GetCurrentSpecId()
-	GearWeightsDB.profiles[specId] = GearWeightsDB.profiles[specId] or { weights = {} }
-	return GearWeightsDB.profiles[specId]
+	GearWeightsDB.profiles[charKey] = GearWeightsDB.profiles[charKey] or {}
+	GearWeightsDB.profiles[charKey][specId] = GearWeightsDB.profiles[charKey][specId] or { weights = {} }
+	return GearWeightsDB.profiles[charKey][specId]
 end
 
 function GW.GetKnownStats()
@@ -577,11 +616,16 @@ local function RegisterDiscoveredStats(stats)
 			GearWeightsDB.knownStats[key] = label
 
 			-- If an earlier import was waiting on this exact stat to show up, apply it now.
-			for specId, pending in pairs(GearWeightsDB.pendingImports) do
-				if pending[label] ~= nil then
-					GearWeightsDB.profiles[specId] = GearWeightsDB.profiles[specId] or { weights = {} }
-					GearWeightsDB.profiles[specId].weights[key] = pending[label]
-					pending[label] = nil
+			local charKey = GW.GetCurrentCharacterKey()
+			local pendingForChar = GearWeightsDB.pendingImports[charKey]
+			if pendingForChar then
+				for specId, pending in pairs(pendingForChar) do
+					if pending[label] ~= nil then
+						GearWeightsDB.profiles[charKey] = GearWeightsDB.profiles[charKey] or {}
+						GearWeightsDB.profiles[charKey][specId] = GearWeightsDB.profiles[charKey][specId] or { weights = {} }
+						GearWeightsDB.profiles[charKey][specId].weights[key] = pending[label]
+						pending[label] = nil
+					end
 				end
 			end
 		end
@@ -632,8 +676,10 @@ function GW.ImportWeights(base64Str)
 	local labelToKey = {}
 	for key, label in pairs(known) do labelToKey[label] = key end
 
+	local charKey = GW.GetCurrentCharacterKey()
 	local specId = GW.GetCurrentSpecId()
-	GearWeightsDB.pendingImports[specId] = GearWeightsDB.pendingImports[specId] or {}
+	GearWeightsDB.pendingImports[charKey] = GearWeightsDB.pendingImports[charKey] or {}
+	GearWeightsDB.pendingImports[charKey][specId] = GearWeightsDB.pendingImports[charKey][specId] or {}
 
 	local applied, pending, skipped = 0, 0, 0
 	for bisKey, value in pairs(data) do
@@ -646,7 +692,7 @@ function GW.ImportWeights(base64Str)
 				profile.weights[realKey] = value
 				applied = applied + 1
 			else
-				GearWeightsDB.pendingImports[specId][label] = value
+				GearWeightsDB.pendingImports[charKey][specId][label] = value
 				pending = pending + 1
 			end
 		end

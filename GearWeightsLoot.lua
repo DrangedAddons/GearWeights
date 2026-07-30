@@ -1219,16 +1219,14 @@ end
 
 local WEAPON_BOX_KEYS = { twoHand = true, mainHand = true, offHand = true }
 
--- Returns the current spec's own box table, migrating forward as needed.
+-- Returns the current character+spec's own box table, migrating forward as needed.
 local function EnsureWeaponBaseline()
 	GearWeightsDB = GearWeightsDB or {}
 	GearWeightsDB.weaponBaseline = GearWeightsDB.weaponBaseline or {}
 
-	-- Pre-1.26.40 versions kept one flat, shared set of boxes for every spec -
-	-- detected here by a WEAPON_BOX_KEYS entry sitting directly under
-	-- weaponBaseline instead of under a specId layer - migrated into the
-	-- currently active spec's own bucket the first time this runs after
-	-- upgrading, so an already-locked/tracked weapon isn't lost.
+	-- Pre-1.26.40: one flat, shared set of boxes for every spec AND every
+	-- character - detected by a WEAPON_BOX_KEYS entry sitting directly under
+	-- weaponBaseline. Wrap it under the currently active spec first.
 	local isFlatLegacyShape = false
 	for key in pairs(WEAPON_BOX_KEYS) do
 		if type(GearWeightsDB.weaponBaseline[key]) == "table" then
@@ -1241,11 +1239,29 @@ local function EnsureWeaponBaseline()
 		GearWeightsDB.weaponBaseline = { [GW.GetCurrentSpecId()] = legacy }
 	end
 
+	-- 1.26.40-1.26.43: keyed by specId only, still shared account-wide across
+	-- every character - so two characters landing on the same spec slot saw
+	-- each other's tracked weapons. Detected by a numeric specId key sitting
+	-- directly under weaponBaseline instead of under a characterKey layer;
+	-- wrapped under the currently active character the first time this runs
+	-- after upgrading - whichever character loads first keeps the existing
+	-- data, every other character starts fresh.
+	local isSpecOnlyLegacyShape = false
+	for key in pairs(GearWeightsDB.weaponBaseline) do
+		if type(key) == "number" then isSpecOnlyLegacyShape = true; break end
+	end
+	if isSpecOnlyLegacyShape then
+		local legacy = GearWeightsDB.weaponBaseline
+		GearWeightsDB.weaponBaseline = { [GW.GetCurrentCharacterKey()] = legacy }
+	end
+
+	local charKey = GW.GetCurrentCharacterKey()
 	local specId = GW.GetCurrentSpecId()
-	local perSpec = GearWeightsDB.weaponBaseline[specId]
+	GearWeightsDB.weaponBaseline[charKey] = GearWeightsDB.weaponBaseline[charKey] or {}
+	local perSpec = GearWeightsDB.weaponBaseline[charKey][specId]
 	if type(perSpec) ~= "table" then
 		perSpec = {}
-		GearWeightsDB.weaponBaseline[specId] = perSpec
+		GearWeightsDB.weaponBaseline[charKey][specId] = perSpec
 	end
 	for key in pairs(WEAPON_BOX_KEYS) do
 		-- An even older version (1.21.x) stored mainHand/offHand as raw link

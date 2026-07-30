@@ -22,7 +22,13 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.43 - 2026-07-29
+## v1.26.44 - 2026-07-29
+
+### Fixes
+- Fixed stat-weight profiles and weapon baseline boxes being shared across different characters on the same account whenever they landed on the same numeric spec slot - both are now scoped per-character (in addition to per-spec), so a brand-new character always starts blank instead of inheriting another character's weights/tracked weapons. Existing data migrates automatically into whichever character is active the first time this version loads.
+
+<details>
+<summary>v1.26.43 - 2026-07-29</summary>
 
 ### Fixes
 - Fixed the Greed-roll Bind-on-Pickup bypass ("Prompt to accept BoP when Greed looting", unticked) never actually suppressing the confirmation popup - `LOOT_ROLL_TYPE_GREED` is nil on this server's client even though the roll type value itself arrives normally, so the comparison silently always failed. Now falls back to the standard numeric value when the named constant isn't defined.
