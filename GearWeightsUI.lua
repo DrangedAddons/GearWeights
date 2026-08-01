@@ -137,6 +137,15 @@ local function RefreshRows()
 		end
 	end
 
+	-- Track the scroll frame's actual current width (it resizes with the
+	-- window) rather than staying at content's original fixed 340 - without
+	-- this, the "Weight" header (anchored to the scroll frame, so it DOES
+	-- move on resize) drifts out of alignment with the edit boxes (anchored
+	-- to each row's own right edge, which never changed).
+	local rowWidth = scrollFrame:GetWidth()
+	if rowWidth and rowWidth > 0 then
+		content:SetWidth(rowWidth)
+	end
 	content:SetHeight(math.max(#items * ROW_HEIGHT, VISIBLE_ROWS * ROW_HEIGHT))
 
 	for i, item in ipairs(items) do
@@ -144,6 +153,9 @@ local function RefreshRows()
 		if not row then
 			row = CreateRow(i)
 			rowPool[i] = row
+		end
+		if rowWidth and rowWidth > 0 then
+			row:SetWidth(rowWidth)
 		end
 		if item.isHeader then
 			SetRowAsHeader(row, item.text)
@@ -1973,6 +1985,13 @@ local function CreateMainFrame()
 	-- Pushed down from -20 to clear the spec-picker dropdown added above.
 	scrollFrame:SetPoint("TOPLEFT", 20, -58)
 	scrollFrame:SetPoint("BOTTOMRIGHT", -34, 48)
+	-- Re-lay-out row/content widths whenever the window (and so this scroll
+	-- frame) is resized, same approach as the Instance Loot tab - otherwise
+	-- the "Weight" header (anchored to the scroll frame) drifts out of
+	-- alignment with the edit boxes (anchored to each row's own width).
+	scrollFrame:SetScript("OnSizeChanged", function()
+		if statsPanel:IsShown() then RefreshRows() end
+	end)
 
 	content = CreateFrame("Frame", nil, scrollFrame)
 	content:SetSize(340, VISIBLE_ROWS * ROW_HEIGHT)
