@@ -579,8 +579,14 @@ function GW.GetCurrentSpecId()
 	return 0
 end
 
-function GW.GetCurrentSpecName()
-	local id = GW.GetCurrentSpecId()
+-- Ascension - Conquest of Azeroth allows 20 specialization slots per
+-- character - used to enumerate every possible spec for the Settings tab's
+-- cross-spec comparison checklist (GearWeightsUI.lua).
+GW.SPEC_COUNT = 20
+
+-- The player's own name for a spec slot (respects renames) - falls back to
+-- "Spec N" if SpecializationUtil can't name it (e.g. never configured).
+function GW.GetSpecName(id)
 	if id == 0 then return "Default" end
 	if SpecializationUtil and SpecializationUtil.GetSpecializationInfo then
 		local ok, name = pcall(SpecializationUtil.GetSpecializationInfo, id)
@@ -589,13 +595,24 @@ function GW.GetCurrentSpecName()
 	return "Spec " .. tostring(id)
 end
 
-function GW.GetActiveProfile()
+function GW.GetCurrentSpecName()
+	return GW.GetSpecName(GW.GetCurrentSpecId())
+end
+
+-- The stat-weight profile for an arbitrary spec (not necessarily the active
+-- one) - used by the cross-spec tooltip comparison to score a candidate item
+-- against a DIFFERENT spec's own weights, not whichever spec you're
+-- currently playing. GW.GetActiveProfile is just this for the current spec.
+function GW.GetProfileForSpec(specId)
 	EnsureDB()
 	local charKey = GW.GetCurrentCharacterKey()
-	local specId = GW.GetCurrentSpecId()
 	GearWeightsDB.profiles[charKey] = GearWeightsDB.profiles[charKey] or {}
 	GearWeightsDB.profiles[charKey][specId] = GearWeightsDB.profiles[charKey][specId] or { weights = {} }
 	return GearWeightsDB.profiles[charKey][specId]
+end
+
+function GW.GetActiveProfile()
+	return GW.GetProfileForSpec(GW.GetCurrentSpecId())
 end
 
 function GW.GetKnownStats()
@@ -641,10 +658,14 @@ function GW.GetItemStats(itemLink)
 	return scanTable
 end
 
-function GW.GetItemScore(itemLink)
+-- specId is optional - omit it (or pass nil) to score against your current
+-- active spec's weights, as every existing caller does; the cross-spec
+-- tooltip comparison passes an explicit specId to score the same item
+-- against a DIFFERENT spec's own saved weights instead.
+function GW.GetItemScore(itemLink, specId)
 	local stats = GW.GetItemStats(itemLink)
 	if not stats then return nil end
-	local profile = GW.GetActiveProfile()
+	local profile = specId and GW.GetProfileForSpec(specId) or GW.GetActiveProfile()
 	local score = 0
 	for key, value in pairs(stats) do
 		if type(value) == "number" and GW.IsCanonicalStatKey(key) then
@@ -668,7 +689,10 @@ end
 -- this number come from" breakdown; GW.GetItemScore above stays the fast,
 -- single-number version for everywhere else (ranking scans, weapon
 -- comparisons) that doesn't need this extra detail.
-function GW.GetItemScoreBreakdownVsEquipped(itemLink, equippedLink)
+-- specId is optional, same meaning as GW.GetItemScore - scores both items
+-- against a specific spec's weights instead of the active spec's, for the
+-- cross-spec comparison.
+function GW.GetItemScoreBreakdownVsEquipped(itemLink, equippedLink, specId)
 	local rawCandidateStats = GW.GetItemStats(itemLink)
 	if not rawCandidateStats then return nil end
 	-- GW.GetItemStats reuses one shared scratch table across every call - a
@@ -678,7 +702,7 @@ function GW.GetItemScoreBreakdownVsEquipped(itemLink, equippedLink)
 	local candidateStats = {}
 	for k, v in pairs(rawCandidateStats) do candidateStats[k] = v end
 	local equippedStats = equippedLink and GW.GetItemStats(equippedLink) or nil
-	local profile = GW.GetActiveProfile()
+	local profile = specId and GW.GetProfileForSpec(specId) or GW.GetActiveProfile()
 	local known = GW.GetKnownStats()
 
 	local seen = {}
@@ -874,6 +898,79 @@ function GW.GetBestUpgradeDiff(itemLink)
 	return score, bestDiff, nil, flipsLoadout, bestEquippedLink
 end
 
+--------------------------------------------------------------------------------
+-- Cross-spec tooltip comparison (Settings tab: Spec Comparisons). Shows
+-- whether a candidate item would also be an upgrade for OTHER specs, not
+-- just whichever one you're actively playing - there's no live "currently
+-- equipped" for a spec you're not standing in, so this reads a Blizzard
+-- Equipment Set the user has explicitly assigned to that spec instead.
+--
+-- Equipment Sets only expose bare item IDs (GetEquipmentSetItemIDs), not the
+-- full item link a live-equipped item has - so gems/enchants on that spec's
+-- saved gear aren't reflected in its score, only the base item's own stats.
+-- Good enough to catch a real upgrade, but not perfectly precise.
+--
+-- Weapon slots are treated as plain single-slot comparisons here (whatever
+-- the Equipment Set has in Main-Hand/Off-Hand), unlike the active spec's own
+-- Two-Hand vs Main-Hand+Off-Hand combo logic - there's no way to track which
+-- of two loadouts a non-active spec would rather use, since that tracking is
+-- itself driven by live equip-change events for whichever spec IS active.
+--------------------------------------------------------------------------------
+
+-- The item this Equipment Set has saved for a given inventory slot, as a
+-- plain (unenchanted/ungemmed) item link - nil if the set doesn't exist,
+-- doesn't have anything saved for that slot, or the item isn't cached yet.
+function GW.GetEquipmentSetItemLink(setName, slotId)
+	if not setName or not slotId then return nil end
+	local ok, itemIDs = pcall(GetEquipmentSetItemIDs, setName)
+	if not ok or not itemIDs then return nil end
+	local itemID = itemIDs[slotId]
+	if not itemID or itemID <= 0 then return nil end
+	local _, itemLink = GetItemInfo(itemID)
+	return itemLink
+end
+
+-- Same shape of result as GW.GetBestUpgradeDiff (score, diff, equippedLink),
+-- but for a specific OTHER spec's Equipment Set instead of your live
+-- inventory - picks whichever of the item's relevant slot(s) gives the best
+-- diff, same idea as GW.GetBestUpgradeDiff's own slot loop, simplified
+-- (no Unique-Equipped/armor-type narrowing - this is an approximate "would
+-- this be worth it" check for a spec you're not standing in, not a strict
+-- guarantee you could equip it that instant).
+function GW.GetSpecComparisonForItem(itemLink, specId, setName)
+	if not setName then return nil end
+	local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
+	if not equipLoc then return nil end
+
+	local score = GW.GetItemScore(itemLink, specId)
+	if not score then return nil end
+
+	local slots = slotsForEquipLoc[equipLoc]
+	if not slots or #slots == 0 then return nil end
+
+	local bestDiff, bestEquippedLink, sawAnySlot
+	for _, slotId in ipairs(slots) do
+		local equippedLink = GW.GetEquipmentSetItemLink(setName, slotId)
+		local diff
+		if not equippedLink then
+			diff = score
+		elseif equippedLink ~= itemLink then
+			local equippedScore = GW.GetItemScore(equippedLink, specId)
+			if equippedScore then diff = score - equippedScore end
+		end
+		if diff then
+			sawAnySlot = true
+			if not bestDiff or diff > bestDiff then
+				bestDiff = diff
+				bestEquippedLink = equippedLink
+			end
+		end
+	end
+	if not sawAnySlot then return nil end
+
+	return score, bestDiff, bestEquippedLink
+end
+
 -- Blizzard's native shift-compare (ShoppingTooltip1/2) always shows whatever
 -- is physically equipped right now, which is the wrong reference the moment
 -- you're wearing a 2H and considering a 1H item (or vice versa), or have a
@@ -988,6 +1085,44 @@ local function ShowWeaponReferenceTooltip(referenceLink, label, comparisons)
 end
 
 GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
+
+-- Cross-spec comparison (Settings tab: Spec Comparisons) - appended at the
+-- very end of every equippable item's tooltip, below the active spec's own
+-- score/breakdown/comparison lines, one section per other spec the user has
+-- ticked and assigned an Equipment Set to. Uses GW.GetSpecComparisonForItem
+-- (Equipment-Set-based, since there's no live "currently equipped" for a
+-- spec you're not standing in) and that spec's own saved stat weights, not
+-- whichever spec is actually active right now.
+local function AppendSpecComparisons(tooltip, itemLink)
+	local specTargets = GW.GetSpecCompareTargets()
+	if #specTargets == 0 then return end
+	local fullBreakdown = GW.IsSpecCompareFullBreakdown()
+	for _, target in ipairs(specTargets) do
+		local specScore, specDiff, specEquippedLink = GW.GetSpecComparisonForItem(itemLink, target.specId, target.equipmentSet)
+		if specScore then
+			tooltip:AddLine(" ")
+			tooltip:AddLine(string.format("%s: %.1f", GW.GetSpecName(target.specId), specScore), 0.4, 0.75, 1.0)
+			if specDiff then
+				if specDiff > 0.05 then
+					tooltip:AddLine(string.format("  |cff00ff00Upgrade (+%.1f)|r", specDiff))
+				elseif specDiff < -0.05 then
+					tooltip:AddLine(string.format("  |cffff4444Downgrade (%.1f)|r", specDiff))
+				else
+					tooltip:AddLine("  |cffffff00Sidegrade (~equal)|r")
+				end
+			end
+			if fullBreakdown then
+				local specBreakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, specEquippedLink, target.specId)
+				if specBreakdown then
+					for _, entry in ipairs(specBreakdown) do
+						local color = entry.contribution >= 0 and "|cff00ff00" or "|cffff4444"
+						tooltip:AddLine(string.format("    %+.0f %s (%s%+.1f|r)", entry.displayValue, entry.label, color, entry.contribution), 0.7, 0.7, 0.7)
+					end
+				end
+			end
+		end
+	end
+end
 
 local function AppendScoreLines(tooltip, itemLink)
 	if not itemLink then return end
@@ -1137,6 +1272,7 @@ local function AppendScoreLines(tooltip, itemLink)
 				end
 			end
 		end
+		AppendSpecComparisons(tooltip, itemLink)
 		tooltip:Show()
 		return
 	end
@@ -1160,6 +1296,7 @@ local function AppendScoreLines(tooltip, itemLink)
 	for _, slotId in ipairs(slots) do
 		if slotId ~= INVSLOT_MAINHAND and slotId ~= INVSLOT_OFFHAND
 			and GW.GetEquippedLinkForScoring(slotId) == itemLink then
+			AppendSpecComparisons(tooltip, itemLink)
 			tooltip:Show()
 			return
 		end
@@ -1307,6 +1444,7 @@ local function AppendScoreLines(tooltip, itemLink)
 		end
 	end
 
+	AppendSpecComparisons(tooltip, itemLink)
 	tooltip:Show()
 end
 

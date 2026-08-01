@@ -22,10 +22,22 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.47 - 2026-07-29
+## v1.26.48 - 2026-07-29
+
+### New: Cross-spec tooltip comparison
+- Item tooltips can now show whether a candidate is also an upgrade for OTHER specs, not just whichever one you're actively playing - scored against that spec's own saved stat weights, shown below the active spec's own score/breakdown.
+- Since there's no live "currently equipped" for a spec you're not standing in, each spec you enable needs a Blizzard Equipment Set assigned to it (new Settings tab section: "Spec Comparisons", one row per spec slot with a checkbox + dropdown of your saved sets). Specs 1 & 2 start ticked; a spec's comparison doesn't show on tooltips until a set is also assigned to it.
+- Equipment Sets only expose the base item ID for each slot, not the full item link - so gems/enchants on that spec's saved gear aren't factored into its score, only the item's own innate stats. Good enough to catch a real upgrade, not perfectly precise.
+- Weapon slots for other specs are treated as plain single-slot comparisons (whatever the Equipment Set has saved for Main-Hand/Off-Hand) - the active spec's own Two-Hand vs Main-Hand+Off-Hand combo tracking only applies to whichever spec you're actually playing, since that tracking is driven by live equip-change events.
+- A Settings toggle controls whether other specs show a full per-stat breakdown (default) or just a compact Upgrade/Downgrade line.
+
+<details>
+<summary>v1.26.47 - 2026-07-29</summary>
 
 ### New: Tooltip score breakdown
 - The "GearWeights: X.X" tooltip line now shows a per-stat breakdown underneath it (e.g. "+20 Spell Power (+6.0)"), so it's clear exactly which stats are driving the score. Each stat's contribution is relative to whatever this item would actually replace, not the item's own absolute stat value - so a stat you'd have less of than what you're already wearing correctly shows as a downgrade for that one line, even while other stats make the item an overall upgrade. Falls back to plain absolute contributions when there's nothing to compare against (an empty slot, or a Two-Handed weapon, whose comparison is a combined score rather than a single item). Only stats this profile actually weights are shown, biggest contribution first.
+
+</details>
 
 <details>
 <summary>v1.26.44 - 2026-07-29</summary>

@@ -953,6 +953,76 @@ local function EnsureLootSettings()
 	if GearWeightsDB.settings.otherSourceReputation == nil then
 		GearWeightsDB.settings.otherSourceReputation = true
 	end
+	-- Cross-spec tooltip comparison (Settings tab: Spec Comparisons) - which
+	-- of the 20 spec slots get an extra comparison line on tooltips, and
+	-- which saved Equipment Set represents each one's gear (there's no live
+	-- "currently equipped" for a spec you're not standing in). Specs 1 & 2
+	-- start ticked per the user's own request, even though neither does
+	-- anything until an Equipment Set is actually assigned to it.
+	if GearWeightsDB.settings.specCompare == nil then
+		GearWeightsDB.settings.specCompare = {}
+	end
+	for i = 1, GW.SPEC_COUNT do
+		if GearWeightsDB.settings.specCompare[i] == nil then
+			GearWeightsDB.settings.specCompare[i] = { enabled = (i == 1 or i == 2), equipmentSet = nil }
+		end
+	end
+	if GearWeightsDB.settings.specCompareFullBreakdown == nil then
+		GearWeightsDB.settings.specCompareFullBreakdown = true
+	end
+end
+
+function GW.IsSpecCompareEnabled(specId)
+	EnsureLootSettings()
+	local entry = GearWeightsDB.settings.specCompare[specId]
+	return entry ~= nil and entry.enabled == true
+end
+
+function GW.SetSpecCompareEnabled(specId, enabled)
+	EnsureLootSettings()
+	GearWeightsDB.settings.specCompare[specId] = GearWeightsDB.settings.specCompare[specId] or {}
+	GearWeightsDB.settings.specCompare[specId].enabled = enabled and true or false
+end
+
+function GW.GetSpecCompareEquipmentSet(specId)
+	EnsureLootSettings()
+	local entry = GearWeightsDB.settings.specCompare[specId]
+	return entry and entry.equipmentSet
+end
+
+function GW.SetSpecCompareEquipmentSet(specId, setName)
+	EnsureLootSettings()
+	GearWeightsDB.settings.specCompare[specId] = GearWeightsDB.settings.specCompare[specId] or {}
+	GearWeightsDB.settings.specCompare[specId].equipmentSet = setName
+end
+
+function GW.IsSpecCompareFullBreakdown()
+	EnsureLootSettings()
+	return GearWeightsDB.settings.specCompareFullBreakdown
+end
+
+function GW.SetSpecCompareFullBreakdown(enabled)
+	EnsureLootSettings()
+	GearWeightsDB.settings.specCompareFullBreakdown = enabled and true or false
+end
+
+-- Every OTHER spec (not the currently active one) that's ticked for
+-- cross-spec comparison AND has an Equipment Set assigned - what the
+-- tooltip actually iterates over. Skips the active spec since that's
+-- already shown via the normal, live-equipped comparison above it.
+function GW.GetSpecCompareTargets()
+	EnsureLootSettings()
+	local currentSpecId = GW.GetCurrentSpecId()
+	local targets = {}
+	for i = 1, GW.SPEC_COUNT do
+		if i ~= currentSpecId then
+			local entry = GearWeightsDB.settings.specCompare[i]
+			if entry and entry.enabled and entry.equipmentSet then
+				table.insert(targets, { specId = i, equipmentSet = entry.equipmentSet })
+			end
+		end
+	end
+	return targets
 end
 
 function GW.IsDungeonRankTierEnabled(tier)

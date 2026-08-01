@@ -2281,7 +2281,10 @@ local function CreateMainFrame()
 	settingsScrollFrame:SetPoint("BOTTOMRIGHT", -28, 4)
 
 	local settingsContent = CreateFrame("Frame", nil, settingsScrollFrame)
-	settingsContent:SetSize(430, 1100)
+	-- Tall enough to fit every section fully expanded at once, including the
+	-- 20-row Spec Comparisons section below - the scroll frame handles it
+	-- either way, this just needs to not clip the bottom off.
+	settingsContent:SetSize(430, 1750)
 	settingsScrollFrame:SetScrollChild(settingsContent)
 
 	local settingsHeader = settingsContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -2650,6 +2653,84 @@ local function CreateMainFrame()
 		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
 		text:SetText(standing)
 		reputationTierChecks[standing] = check
+	end
+
+	-- Spec Comparisons - cross-spec tooltip comparison
+	-- (GW.AppendSpecComparisons-equivalent logic lives in GearWeights.lua).
+	-- There's no live "currently equipped" for a spec you're not standing
+	-- in, so each ticked spec needs a Blizzard Equipment Set assigned to
+	-- represent its gear - the dropdown lists whatever sets you've already
+	-- saved via Blizzard's own Equipment Manager (the paperdoll's set
+	-- button, or /equipset save). Specs 1 & 2 default ticked; a spec's
+	-- comparison doesn't actually show up on tooltips until a set is picked
+	-- for it too.
+	local SPEC_ROW_HEIGHT = 28
+	local specCompareContent = CreateSettingsSection("specCompare", "Spec Comparisons",
+		60 + GW.SPEC_COUNT * SPEC_ROW_HEIGHT)
+
+	local specCompareHint = specCompareContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	specCompareHint:SetPoint("TOPLEFT", 0, 0)
+	specCompareHint:SetText("Checked specs get an extra comparison line on item tooltips, scored against that spec's own stat weights and whichever Equipment Set you assign it below.")
+	specCompareHint:SetWidth(400)
+	specCompareHint:SetJustifyH("LEFT")
+
+	local specCompareFullBreakdownCheck = CreateFrame("CheckButton", nil, specCompareContent, "UICheckButtonTemplate")
+	specCompareFullBreakdownCheck:SetSize(16, 16)
+	specCompareFullBreakdownCheck:SetPoint("TOPLEFT", specCompareHint, "BOTTOMLEFT", 0, -8)
+	specCompareFullBreakdownCheck:SetChecked(GW.IsSpecCompareFullBreakdown())
+	specCompareFullBreakdownCheck:SetScript("OnClick", function(self)
+		GW.SetSpecCompareFullBreakdown(self:GetChecked() and true or false)
+	end)
+	local specCompareFullBreakdownText = specCompareContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	specCompareFullBreakdownText:SetPoint("LEFT", specCompareFullBreakdownCheck, "RIGHT", 2, 0)
+	specCompareFullBreakdownText:SetText("Show full stat breakdown for other specs (unchecked: compact Upgrade/Downgrade line only)")
+
+	local specCompareChecks, specCompareDropdowns = {}, {}
+	for specId = 1, GW.SPEC_COUNT do
+		local check = CreateFrame("CheckButton", nil, specCompareContent, "UICheckButtonTemplate")
+		check:SetSize(16, 16)
+		check:SetPoint("TOPLEFT", specCompareFullBreakdownCheck, "BOTTOMLEFT", 0, -20 - (specId - 1) * SPEC_ROW_HEIGHT)
+		check:SetChecked(GW.IsSpecCompareEnabled(specId))
+		check:SetScript("OnClick", function(self)
+			GW.SetSpecCompareEnabled(specId, self:GetChecked() and true or false)
+		end)
+		specCompareChecks[specId] = check
+
+		local text = specCompareContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		text:SetPoint("LEFT", check, "RIGHT", 2, 0)
+		text:SetWidth(140)
+		text:SetJustifyH("LEFT")
+		text:SetWordWrap(false)
+		text:SetText(GW.GetSpecName(specId))
+
+		-- Global name required by UIDropDownMenuTemplate's own internal
+		-- button/text naming convention - one per spec slot.
+		local dropdown = CreateFrame("Frame", "GearWeightsSpecSetDropdown" .. specId, specCompareContent, "UIDropDownMenuTemplate")
+		dropdown:SetPoint("LEFT", text, "RIGHT", 6, -2)
+		UIDropDownMenu_SetWidth(dropdown, 130)
+		UIDropDownMenu_Initialize(dropdown, function(self, level)
+			local info = UIDropDownMenu_CreateInfo()
+			info.text = "None"
+			info.func = function()
+				GW.SetSpecCompareEquipmentSet(specId, nil)
+				UIDropDownMenu_SetText(dropdown, "None")
+			end
+			UIDropDownMenu_AddButton(info)
+			for i = 1, GetNumEquipmentSets() do
+				local setName = GetEquipmentSetInfo(i)
+				if setName then
+					info = UIDropDownMenu_CreateInfo()
+					info.text = setName
+					info.func = function()
+						GW.SetSpecCompareEquipmentSet(specId, setName)
+						UIDropDownMenu_SetText(dropdown, setName)
+					end
+					UIDropDownMenu_AddButton(info)
+				end
+			end
+		end)
+		UIDropDownMenu_SetText(dropdown, GW.GetSpecCompareEquipmentSet(specId) or "None")
+		specCompareDropdowns[specId] = dropdown
 	end
 
 	ReflowSettingsSections()
