@@ -9,6 +9,16 @@ local statsPanel, lootPanel, settingsPanel
 local statsTabBtn, lootTabBtn, settingsTabBtn
 local lockedSlotChecks
 
+-- Which spec's weights the Stats tab is currently viewing/editing - nil
+-- means "follow whatever spec is actually active" (the default), a specific
+-- id means the user explicitly picked a spec via the dropdown to configure
+-- its weights without needing to switch to it (e.g. setting up a spec for
+-- the Settings tab's cross-spec tooltip comparison).
+local viewedSpecId
+local function GetViewedSpecId()
+	return viewedSpecId or GW.GetCurrentSpecId()
+end
+
 local CATEGORY_ORDER = { "Primary", "Secondary", "Offensive", "Resistances", "Other" }
 
 local function CategoryForLabel(label)
@@ -70,7 +80,7 @@ local function CreateRow(index)
 	edit:SetScript("OnEditFocusLost", function(self)
 		if row.statKey then
 			local val = tonumber(self:GetText())
-			local profile = GW.GetActiveProfile()
+			local profile = GW.GetProfileForSpec(GetViewedSpecId())
 			profile.weights[row.statKey] = val
 			if GW.NotifyWeightsChanged then GW.NotifyWeightsChanged() end
 		end
@@ -100,7 +110,7 @@ end
 
 local function RefreshRows()
 	local known = GW.GetKnownStats()
-	local profile = GW.GetActiveProfile()
+	local profile = GW.GetProfileForSpec(GetViewedSpecId())
 
 	local byCategory = {}
 	for _, cat in ipairs(CATEGORY_ORDER) do
@@ -147,7 +157,12 @@ local function RefreshRows()
 		rowPool[i]:Hide()
 	end
 
-	specLabel:SetText("Profile: " .. GW.GetCurrentSpecName())
+	local shownSpecId = GetViewedSpecId()
+	if shownSpecId == GW.GetCurrentSpecId() then
+		specLabel:SetText("Profile: " .. GW.GetSpecName(shownSpecId))
+	else
+		specLabel:SetText("Profile: " .. GW.GetSpecName(shownSpecId) .. " |cffff8800(not your active spec)|r")
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -208,7 +223,7 @@ local function ShowExportPopup()
 	local f = importExportFrame
 	f.title:SetText("Export Stat Weights")
 	f.hint:SetText("Ctrl+C to copy")
-	f.edit:SetText(GW.ExportWeights())
+	f.edit:SetText(GW.ExportWeights(GetViewedSpecId()))
 	f.edit:SetScript("OnTextChanged", nil)
 	f.actionButton:SetText("Close")
 	f.actionButton:SetScript("OnClick", function() f:Hide() end)
@@ -226,7 +241,7 @@ local function ShowImportPopup()
 	f.actionButton:SetText("Import")
 	f.actionButton:SetScript("OnClick", function()
 		local text = strtrim(f.edit:GetText())
-		local ok, a, b, c = GW.ImportWeights(text)
+		local ok, a, b, c = GW.ImportWeights(text, GetViewedSpecId())
 		if ok then
 			DEFAULT_CHAT_FRAME:AddMessage(string.format(
 				"GearWeights: imported %d stat(s), %d pending until seen on gear, %d unrecognized.", a, b, c))
@@ -1880,6 +1895,34 @@ local function CreateMainFrame()
 	specLabel = statsPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	specLabel:SetPoint("TOP", 0, -4)
 
+	-- Lets you view/edit ANY spec's weights from wherever you're currently
+	-- playing - e.g. setting up a spec for the Settings tab's cross-spec
+	-- tooltip comparison without needing to actually switch to it.
+	local specPickerDropdown = CreateFrame("Frame", "GearWeightsStatsSpecPicker", statsPanel, "UIDropDownMenuTemplate")
+	specPickerDropdown:SetPoint("TOP", specLabel, "BOTTOM", 0, -4)
+	UIDropDownMenu_SetWidth(specPickerDropdown, 160)
+	UIDropDownMenu_Initialize(specPickerDropdown, function(self, level)
+		local info = UIDropDownMenu_CreateInfo()
+		info.text = "Active Spec (auto)"
+		info.func = function()
+			viewedSpecId = nil
+			UIDropDownMenu_SetText(specPickerDropdown, "Active Spec (auto)")
+			RefreshRows()
+		end
+		UIDropDownMenu_AddButton(info)
+		for specId = 1, GW.SPEC_COUNT do
+			info = UIDropDownMenu_CreateInfo()
+			info.text = GW.GetSpecName(specId)
+			info.func = function()
+				viewedSpecId = specId
+				UIDropDownMenu_SetText(specPickerDropdown, GW.GetSpecName(specId))
+				RefreshRows()
+			end
+			UIDropDownMenu_AddButton(info)
+		end
+	end)
+	UIDropDownMenu_SetText(specPickerDropdown, "Active Spec (auto)")
+
 	local rescan = CreateFrame("Button", nil, statsPanel, "UIPanelButtonTemplate")
 	rescan:SetSize(150, 22)
 	rescan:SetPoint("BOTTOM", 0, 16)
@@ -1917,7 +1960,8 @@ local function CreateMainFrame()
 	exportBtn:SetScript("OnClick", ShowExportPopup)
 
 	scrollFrame = CreateFrame("ScrollFrame", "GearWeightsScrollFrame", statsPanel, "UIPanelScrollFrameTemplate")
-	scrollFrame:SetPoint("TOPLEFT", 20, -20)
+	-- Pushed down from -20 to clear the spec-picker dropdown added above.
+	scrollFrame:SetPoint("TOPLEFT", 20, -58)
 	scrollFrame:SetPoint("BOTTOMRIGHT", -34, 48)
 
 	content = CreateFrame("Frame", nil, scrollFrame)

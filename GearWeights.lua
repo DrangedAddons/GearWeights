@@ -737,8 +737,11 @@ end
 -- Import / Export (bisbeard.com stat weight format)
 --------------------------------------------------------------------------------
 
+-- specId is optional - defaults to your current active spec; the Stats
+-- tab's spec picker passes an explicit one to import into a DIFFERENT spec's
+-- profile without needing to actually switch to it.
 -- Returns: ok, appliedCount, pendingCount, skippedCount  (or ok=false, errorMessage)
-function GW.ImportWeights(base64Str)
+function GW.ImportWeights(base64Str, specId)
 	EnsureDB()
 	local ok, jsonStr = pcall(Base64Decode, base64Str)
 	if not ok or jsonStr == "" then
@@ -749,13 +752,13 @@ function GW.ImportWeights(base64Str)
 		return false, "No recognizable weight data found in that string."
 	end
 
-	local profile = GW.GetActiveProfile()
+	specId = specId or GW.GetCurrentSpecId()
+	local profile = GW.GetProfileForSpec(specId)
 	local known = GW.GetKnownStats()
 	local labelToKey = {}
 	for key, label in pairs(known) do labelToKey[label] = key end
 
 	local charKey = GW.GetCurrentCharacterKey()
-	local specId = GW.GetCurrentSpecId()
 	GearWeightsDB.pendingImports[charKey] = GearWeightsDB.pendingImports[charKey] or {}
 	GearWeightsDB.pendingImports[charKey][specId] = GearWeightsDB.pendingImports[charKey][specId] or {}
 
@@ -779,8 +782,9 @@ function GW.ImportWeights(base64Str)
 	return true, applied, pending, skipped
 end
 
-function GW.ExportWeights()
-	local profile = GW.GetActiveProfile()
+-- specId is optional, same meaning as GW.ImportWeights.
+function GW.ExportWeights(specId)
+	local profile = specId and GW.GetProfileForSpec(specId) or GW.GetActiveProfile()
 	local known = GW.GetKnownStats()
 
 	local labelToBisKey = {}

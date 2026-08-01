@@ -22,7 +22,7 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.48 - 2026-07-29
+## v1.26.49 - 2026-07-29
 
 ### New: Cross-spec tooltip comparison
 - Item tooltips can now show whether a candidate is also an upgrade for OTHER specs, not just whichever one you're actively playing - scored against that spec's own saved stat weights, shown below the active spec's own score/breakdown.
@@ -30,6 +30,7 @@ the actual section further down):
 - Equipment Sets only expose the base item ID for each slot, not the full item link - so gems/enchants on that spec's saved gear aren't factored into its score, only the item's own innate stats. Good enough to catch a real upgrade, not perfectly precise.
 - Weapon slots for other specs are treated as plain single-slot comparisons (whatever the Equipment Set has saved for Main-Hand/Off-Hand) - the active spec's own Two-Hand vs Main-Hand+Off-Hand combo tracking only applies to whichever spec you're actually playing, since that tracking is driven by live equip-change events.
 - A Settings toggle controls whether other specs show a full per-stat breakdown (default) or just a compact Upgrade/Downgrade line.
+- Added a spec picker to the Stats tab so you can view/edit ANY spec's stat weights (including import/export) from wherever you're currently playing, instead of only ever being able to edit whichever spec is actively equipped - needed to actually set up a spec's weights for the cross-spec comparison above without physically switching to it.
 
 <details>
 <summary>v1.26.47 - 2026-07-29</summary>
