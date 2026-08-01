@@ -1791,9 +1791,19 @@ local function CreateMainFrame()
 	-- Explicit full opacity - without this, whatever ambient transparency
 	-- this server's UI setup applies by default (a reskin addon's default
 	-- frame styling, or just a game-world background showing through more
-	-- than expected) made the panel read as busy/see-through.
-	f:SetBackdropColor(1, 1, 1, 1)
-	f:SetBackdropBorderColor(1, 1, 1, 1)
+	-- than expected) made the panel read as busy/see-through. Also forces
+	-- the FRAME's own alpha (separate from - and multiplies against - the
+	-- backdrop color's alpha channel), and re-asserts both every time the
+	-- window is shown rather than only once at creation, in case something
+	-- else (a reskin addon hooking OnShow, most likely) re-applies its own
+	-- transparency after this runs.
+	local function ForceOpaqueBackdrop()
+		f:SetBackdropColor(1, 1, 1, 1)
+		f:SetBackdropBorderColor(1, 1, 1, 1)
+		f:SetAlpha(1)
+	end
+	ForceOpaqueBackdrop()
+	f:HookScript("OnShow", ForceOpaqueBackdrop)
 	f:Hide()
 
 	local sizer = CreateFrame("Button", nil, f)
