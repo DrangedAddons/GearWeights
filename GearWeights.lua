@@ -655,26 +655,49 @@ function GW.GetItemScore(itemLink)
 	return score, stats
 end
 
--- Per-stat breakdown of an item's score: which canonical stats it has, their
--- raw values, this profile's weight for each, and the resulting contribution
--- (value * weight) - only stats that actually contribute something non-zero,
--- sorted biggest contribution first. Used for the tooltip's "where does this
--- number come from" breakdown; GW.GetItemScore above stays the fast,
+-- Per-stat breakdown of an item's score, relative to equippedLink instead of
+-- absolute - e.g. an item with less Intellect than what you're already
+-- wearing shows that stat as a NEGATIVE contribution, even though the item's
+-- own tooltip states a positive Intellect value, because what matters for
+-- "why is this an upgrade/downgrade" is the change, not the raw amount.
+-- Falls back to the item's own absolute contribution per stat when
+-- equippedLink is nil (nothing to compare against, e.g. an empty slot).
+-- Includes stats equippedLink has that itemLink doesn't (shown as a pure
+-- loss), so every line here still sums to the same total diff a comparison
+-- line elsewhere on the tooltip states. Used for the tooltip's "where does
+-- this number come from" breakdown; GW.GetItemScore above stays the fast,
 -- single-number version for everywhere else (ranking scans, weapon
 -- comparisons) that doesn't need this extra detail.
-function GW.GetItemScoreBreakdown(itemLink)
-	local stats = GW.GetItemStats(itemLink)
-	if not stats then return nil end
+function GW.GetItemScoreBreakdownVsEquipped(itemLink, equippedLink)
+	local candidateStats = GW.GetItemStats(itemLink)
+	if not candidateStats then return nil end
+	local equippedStats = equippedLink and GW.GetItemStats(equippedLink) or nil
 	local profile = GW.GetActiveProfile()
 	local known = GW.GetKnownStats()
+
+	local seen = {}
 	local breakdown = {}
-	for key, value in pairs(stats) do
-		if type(value) == "number" and GW.IsCanonicalStatKey(key) then
-			local w = profile.weights[key]
-			if w and w ~= 0 then
-				table.insert(breakdown, { label = known[key] or key, value = value, weight = w, contribution = value * w })
-			end
-		end
+	local function considerKey(key)
+		if seen[key] or not GW.IsCanonicalStatKey(key) then return end
+		seen[key] = true
+		local w = profile.weights[key]
+		if not w or w == 0 then return end
+		local candidateValue = type(candidateStats[key]) == "number" and candidateStats[key] or 0
+		local equippedValue = (equippedStats and type(equippedStats[key]) == "number") and equippedStats[key] or 0
+		local diffValue = candidateValue - equippedValue
+		if diffValue == 0 then return end
+		table.insert(breakdown, {
+			label = known[key] or key,
+			-- The item's own stat value where it has one, otherwise (a stat
+			-- only the equipped item has) the loss itself, so the displayed
+			-- number is never a misleading "+0".
+			displayValue = candidateValue ~= 0 and candidateValue or diffValue,
+			contribution = diffValue * w,
+		})
+	end
+	for key in pairs(candidateStats) do considerKey(key) end
+	if equippedStats then
+		for key in pairs(equippedStats) do considerKey(key) end
 	end
 	table.sort(breakdown, function(a, b) return math.abs(a.contribution) > math.abs(b.contribution) end)
 	return breakdown
@@ -766,15 +789,19 @@ local function AppendComparisonLine(tooltip, prefix, score, equippedScore, ignor
 end
 
 
--- Returns score, bestDiff, usable, flipsLoadout. bestDiff is nil if the item
--- isn't equippable, or the best-case score difference vs whatever it could
--- replace, otherwise. usable is false if your class can't use this item at
--- all (score/diff also nil in that case). flipsLoadout is true only for a
--- Main-Hand/Off-Hand/Two-Hand weapon candidate that would change which of
--- your two remembered weapon loadouts (2H, or Main-Hand + Off-Hand combo)
--- scores higher - see GW.CheckWeaponLoadoutFlip - since that's an important
--- signal a plain per-slot diff can miss entirely. Used by the instance loot
--- list; tooltips use their own more detailed breakdown above.
+-- Returns score, bestDiff, usable, flipsLoadout, equippedLink. bestDiff is
+-- nil if the item isn't equippable, or the best-case score difference vs
+-- whatever it could replace, otherwise. usable is false if your class can't
+-- use this item at all (score/diff also nil in that case). flipsLoadout is
+-- true only for a Main-Hand/Off-Hand/Two-Hand weapon candidate that would
+-- change which of your two remembered weapon loadouts (2H, or Main-Hand +
+-- Off-Hand combo) scores higher - see GW.CheckWeaponLoadoutFlip - since
+-- that's an important signal a plain per-slot diff can miss entirely.
+-- equippedLink is whichever item bestDiff was actually computed against (nil
+-- for an empty slot or a 2H item, whose comparison is a combined score, not
+-- a single link) - used by the tooltip's stat breakdown to show each stat's
+-- contribution relative to what you're already wearing, not just the
+-- candidate's own absolute numbers. Used by the instance loot list too.
 function GW.GetBestUpgradeDiff(itemLink)
 	local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
 
@@ -808,7 +835,7 @@ function GW.GetBestUpgradeDiff(itemLink)
 	-- upgrade, same as every slot below being individually locked.
 	local armorIgnoreReason = GW.GetArmorTypeIgnoreReason(itemLink)
 
-	local bestDiff, bestSlotId
+	local bestDiff, bestSlotId, bestEquippedLink
 	if not armorIgnoreReason then
 		for _, slotId in ipairs(slots) do
 			if not GW.GetSlotIgnoreReason(slotId) then
@@ -825,6 +852,7 @@ function GW.GetBestUpgradeDiff(itemLink)
 				if diff and (not bestDiff or diff > bestDiff) then
 					bestDiff = diff
 					bestSlotId = slotId
+					bestEquippedLink = equippedLink
 				end
 			end
 		end
@@ -837,7 +865,7 @@ function GW.GetBestUpgradeDiff(itemLink)
 		flipsLoadout = GW.CheckWeaponLoadoutFlip("offHand", score)
 	end
 
-	return score, bestDiff, nil, flipsLoadout
+	return score, bestDiff, nil, flipsLoadout, bestEquippedLink
 end
 
 -- Blizzard's native shift-compare (ShoppingTooltip1/2) always shows whatever
@@ -989,15 +1017,20 @@ local function AppendScoreLines(tooltip, itemLink)
 	tooltip:AddLine(" ")
 	tooltip:AddLine(string.format("GearWeights: %.1f", score), 0.4, 0.75, 1.0)
 
-	-- Per-stat breakdown of where that number comes from - only stats this
-	-- profile actually weights (zero-weighted stats on the item are omitted
-	-- rather than cluttering the tooltip with contributions of 0), biggest
-	-- contribution first.
-	local breakdown = GW.GetItemScoreBreakdown(itemLink)
+	-- Per-stat breakdown of where that number comes from, relative to
+	-- whatever this would actually replace (same equipped item
+	-- GW.GetBestUpgradeDiff itself compares against) rather than each stat's
+	-- absolute contribution - so a stat this item has less of than what's
+	-- equipped shows as a real downgrade even though the item's own tooltip
+	-- states a positive value for it. Falls back to absolute contributions
+	-- when there's nothing to compare against (empty slot, or a 2H weapon,
+	-- whose comparison is a combined score rather than a single item).
+	local _, _, _, _, breakdownEquippedLink = GW.GetBestUpgradeDiff(itemLink)
+	local breakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, breakdownEquippedLink)
 	if breakdown then
 		for _, entry in ipairs(breakdown) do
 			local color = entry.contribution >= 0 and "|cff00ff00" or "|cffff4444"
-			tooltip:AddLine(string.format("  %+.0f %s (%s%.1f|r)", entry.value, entry.label, color, entry.contribution), 0.7, 0.7, 0.7)
+			tooltip:AddLine(string.format("  %+.0f %s (%s%+.1f|r)", entry.displayValue, entry.label, color, entry.contribution), 0.7, 0.7, 0.7)
 		end
 	end
 
