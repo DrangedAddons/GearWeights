@@ -22,10 +22,12 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.54 - 2026-08-01
+## v1.26.55 - 2026-08-01
 
 ### Fixes
 - Fixed the Stat Weights tab's "Weight" column header drifting out of alignment with the actual weight edit boxes when the window is resized - the header tracked the scroll frame's width, but the row/edit-box widths stayed fixed at their original size. Both now resize together, same approach already used on the Instance Loot tab.
+- Fixed confusing/ambiguous weapon comparison framing on Two-Handed weapon tooltips: "Combo vs Two-Hand" reused "Two-Hand" to mean the candidate itself in one line, right after using it to mean your tracked Two-Hand box in the line above - genuinely ambiguous, not just inconsistently worded. Now reads "vs Combo", consistently framed with the candidate as the subject throughout (matching "vs Two-Hand" above it), the same way Main-Hand/Off-Hand candidates were already framed with the resulting Combo as the subject.
+- Added an explicit "[!] This would make X your better loadout" note on weapon tooltips when a candidate would flip which loadout (Two-Hand vs Combo) scores higher overall - the same flip check that already drives the ranking list's own [!] marker, now also surfaced directly on the tooltip itself.
 
 <details>
 <summary>v1.26.53 - 2026-08-01</summary>

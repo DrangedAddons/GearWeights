@@ -822,6 +822,18 @@ local function AppendComparisonLine(tooltip, prefix, score, equippedScore, ignor
 	end
 end
 
+-- Explicitly calls this out when a weapon candidate would flip which loadout
+-- (Two-Hand vs Main-Hand+Off-Hand Combo) scores higher overall - easy to miss
+-- from the individual comparison lines alone, especially when a Main-Hand or
+-- Off-Hand candidate looks unremarkable on its own but tips the COMBO's
+-- total past your tracked Two-Hand (or vice versa). Same flip check that
+-- already drives the ranking list's own [!] marker (GW.CheckWeaponLoadoutFlip).
+local function AppendLoadoutFlipNote(tooltip, replacingBox, score)
+	local flipped, newBetter = GW.CheckWeaponLoadoutFlip(replacingBox, score)
+	if not flipped then return end
+	local newBetterLabel = newBetter == "twoHand" and "Two-Hand" or "Main-Hand + Off-Hand Combo"
+	tooltip:AddLine(string.format("|cffff8800[!] This would make %s your better loadout|r", newBetterLabel))
+end
 
 -- Returns score, bestDiff, usable, flipsLoadout, equippedLink. bestDiff is
 -- nil if the item isn't equippable, or the best-case score difference vs
@@ -1246,15 +1258,18 @@ local function AppendScoreLines(tooltip, itemLink)
 				-- at all (unlike a Main-Hand/Off-Hand candidate, where the combo
 				-- line above it already establishes what "combo" means
 				-- numerically here) - so state the existing combo's value
-				-- plainly first, otherwise "Combo vs Two-Hand" below has no
-				-- established referent and reads ambiguously about which
-				-- number is which.
+				-- plainly first, then compare against it.
 				tooltip:AddLine(string.format("Main-Hand + Off-Hand Combo: %.1f", comboScore), 0.7, 0.7, 0.7)
-				-- Framed with Combo as the subject ("Combo vs Two-Hand: Upgrade/
-				-- Downgrade"), same as every other combo comparison in this
-				-- feature, rather than "vs combo: Upgrade" from the 2H's own
-				-- perspective - one consistent sentence shape everywhere.
-				AppendComparisonLine(tooltip, string.format("Combo vs Two-Hand %.1f: ", score), comboScore, score, mhIgnoreReason)
+				-- Framed with the CANDIDATE as the subject ("vs Combo: Upgrade/
+				-- Downgrade"), same as "vs Two-Hand" above it - both describe
+				-- this candidate's own standing against a reference. The
+				-- previous "Combo vs Two-Hand" framing put the existing combo
+				-- as the subject instead, and reused "Two-Hand" to mean the
+				-- candidate itself (not your tracked Two-Hand box, which is
+				-- what it means one line up) - a real ambiguity, not just an
+				-- inconsistent tone.
+				AppendComparisonLine(tooltip, string.format("vs Combo %.1f: ", comboScore), score, comboScore, mhIgnoreReason)
+				AppendLoadoutFlipNote(tooltip, "twoHand", score)
 			end
 			-- Always show all three tracked references, regardless of which
 			-- one happens to be physically equipped right now - a locked box
@@ -1264,8 +1279,10 @@ local function AppendScoreLines(tooltip, itemLink)
 			-- order (Main-Hand, then Off-Hand, then Two-Hand) every time.
 			if showReferenceTooltips then
 				local comboInfo = { info = string.format("Main-Hand + Off-Hand Combo: %.1f", comboScore) }
-				local comboComparison = { score = comboScore, vsScore = score,
-					prefix = string.format("Combo vs Two-Hand %.1f: ", score) }
+				-- Candidate as subject, matching the main tooltip's own "vs
+				-- Combo" framing above.
+				local comboComparison = { score = score, vsScore = comboScore,
+					prefix = string.format("vs Combo %.1f: ", comboScore) }
 				if mhLink and not IsWeaponBoxShownNatively("mainHand", mhLink) then
 					ShowWeaponReferenceTooltip(mhLink, "Main-Hand", { comboInfo, comboComparison })
 				end
@@ -1407,6 +1424,7 @@ local function AppendScoreLines(tooltip, itemLink)
 				-- names its own value before "Combo vs Two-Hand 86.3:" names its.
 				AppendComparisonLine(tooltip, string.format("  Combo Main-Hand + Off-Hand %.1f: ", newComboScore), newComboScore, oldComboScore, nil)
 				AppendComparisonLine(tooltip, string.format("  Combo vs Two-Hand %.1f: ", twoHandScore), newComboScore, twoHandScore, nil)
+				AppendLoadoutFlipNote(tooltip, slotId == INVSLOT_MAINHAND and "mainHand" or "offHand", score)
 			end
 
 			-- Always show all three tracked references, regardless of what's
