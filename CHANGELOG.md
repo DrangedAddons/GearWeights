@@ -22,11 +22,12 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.52 - 2026-08-01
+## v1.26.53 - 2026-08-01
 
 ### Fixes
 - Moved the tooltip's per-stat score breakdown to render AFTER the Upgrade/Downgrade verdict line(s) instead of before - the breakdown explains a verdict you've already seen, not the reverse.
 - Main window background opacity: now also forces the frame's own alpha (not just the backdrop color's alpha channel - the two multiply together, so a low frame alpha would mute full-opacity backdrop colors regardless), and re-applies both every time the window is shown rather than only once at creation, in case a reskin addon re-applies its own transparency afterward.
+- Fixed the Settings tab's Spec Comparisons section (checkboxes and Equipment Set assignments) being shared account-wide instead of per-character - switching characters showed one character's spec picks and Equipment Set names on another's screen, same class of bug as the earlier stat-weight-profile/weapon-baseline fix. Existing data migrates to whichever character loads first under this version.
 
 <details>
 <summary>v1.26.50 - 2026-07-29</summary>

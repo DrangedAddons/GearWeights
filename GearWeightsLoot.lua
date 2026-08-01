@@ -958,13 +958,29 @@ local function EnsureLootSettings()
 	-- which saved Equipment Set represents each one's gear (there's no live
 	-- "currently equipped" for a spec you're not standing in). Specs 1 & 2
 	-- start ticked per the user's own request, even though neither does
-	-- anything until an Equipment Set is actually assigned to it.
+	-- anything until an Equipment Set is actually assigned to it. Keyed per
+	-- character (like profiles/weaponBaseline elsewhere) - which specs
+	-- matter and which Equipment Set represents each are both entirely
+	-- character-specific, so a flat/shared version showed one character's
+	-- picks (including Equipment Set names that may not even exist on the
+	-- other character) on every other character's screen too.
 	if GearWeightsDB.settings.specCompare == nil then
 		GearWeightsDB.settings.specCompare = {}
 	end
+	local isLegacyFlatSpecCompare = false
+	for key in pairs(GearWeightsDB.settings.specCompare) do
+		if type(key) == "number" then isLegacyFlatSpecCompare = true; break end
+	end
+	if isLegacyFlatSpecCompare then
+		local legacy = GearWeightsDB.settings.specCompare
+		GearWeightsDB.settings.specCompare = { [GW.GetCurrentCharacterKey()] = legacy }
+	end
+	local specCompareCharKey = GW.GetCurrentCharacterKey()
+	GearWeightsDB.settings.specCompare[specCompareCharKey] = GearWeightsDB.settings.specCompare[specCompareCharKey] or {}
+	local charSpecCompare = GearWeightsDB.settings.specCompare[specCompareCharKey]
 	for i = 1, GW.SPEC_COUNT do
-		if GearWeightsDB.settings.specCompare[i] == nil then
-			GearWeightsDB.settings.specCompare[i] = { enabled = (i == 1 or i == 2), equipmentSet = nil }
+		if charSpecCompare[i] == nil then
+			charSpecCompare[i] = { enabled = (i == 1 or i == 2), equipmentSet = nil }
 		end
 	end
 	if GearWeightsDB.settings.specCompareFullBreakdown == nil then
@@ -974,26 +990,24 @@ end
 
 function GW.IsSpecCompareEnabled(specId)
 	EnsureLootSettings()
-	local entry = GearWeightsDB.settings.specCompare[specId]
+	local entry = GearWeightsDB.settings.specCompare[GW.GetCurrentCharacterKey()][specId]
 	return entry ~= nil and entry.enabled == true
 end
 
 function GW.SetSpecCompareEnabled(specId, enabled)
 	EnsureLootSettings()
-	GearWeightsDB.settings.specCompare[specId] = GearWeightsDB.settings.specCompare[specId] or {}
-	GearWeightsDB.settings.specCompare[specId].enabled = enabled and true or false
+	GearWeightsDB.settings.specCompare[GW.GetCurrentCharacterKey()][specId].enabled = enabled and true or false
 end
 
 function GW.GetSpecCompareEquipmentSet(specId)
 	EnsureLootSettings()
-	local entry = GearWeightsDB.settings.specCompare[specId]
+	local entry = GearWeightsDB.settings.specCompare[GW.GetCurrentCharacterKey()][specId]
 	return entry and entry.equipmentSet
 end
 
 function GW.SetSpecCompareEquipmentSet(specId, setName)
 	EnsureLootSettings()
-	GearWeightsDB.settings.specCompare[specId] = GearWeightsDB.settings.specCompare[specId] or {}
-	GearWeightsDB.settings.specCompare[specId].equipmentSet = setName
+	GearWeightsDB.settings.specCompare[GW.GetCurrentCharacterKey()][specId].equipmentSet = setName
 end
 
 function GW.IsSpecCompareFullBreakdown()
@@ -1012,11 +1026,12 @@ end
 -- already shown via the normal, live-equipped comparison above it.
 function GW.GetSpecCompareTargets()
 	EnsureLootSettings()
+	local charSpecCompare = GearWeightsDB.settings.specCompare[GW.GetCurrentCharacterKey()]
 	local currentSpecId = GW.GetCurrentSpecId()
 	local targets = {}
 	for i = 1, GW.SPEC_COUNT do
 		if i ~= currentSpecId then
-			local entry = GearWeightsDB.settings.specCompare[i]
+			local entry = charSpecCompare[i]
 			if entry and entry.enabled and entry.equipmentSet then
 				table.insert(targets, { specId = i, equipmentSet = entry.equipmentSet })
 			end
