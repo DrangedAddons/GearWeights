@@ -1722,8 +1722,13 @@ function GW.GetMarkOfTriumphInfo()
 	local count, icon, currencyIndex = FindCurrencyInfo("Mark of Triumph")
 	if count then return count, icon, currencyIndex end
 	if GetItemCount then
+		-- The icon is static item data, not tied to how many you own - fetch
+		-- it whenever the count lookup itself succeeds (including a genuine
+		-- 0), rather than only when itemCount > 0. Gating it behind a
+		-- positive count was why a character with none of this currency saw
+		-- a blank/missing-texture icon instead of the real one.
 		local ok, itemCount = pcall(GetItemCount, "Mark of Triumph")
-		if ok and itemCount and itemCount > 0 then
+		if ok and itemCount then
 			local iconOk, itemIcon = pcall(GetItemIcon, "Mark of Triumph")
 			return itemCount, iconOk and itemIcon or nil, nil
 		end
@@ -1863,7 +1868,11 @@ local function CreateMainFrame()
 
 	local function RefreshCurrencyText()
 		local count, icon = GW.GetMarkOfTriumphInfo()
-		currencyIcon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+		-- An empty string is a real, non-nil icon path that SetTexture still
+		-- renders as the broken/missing-texture icon - `or` alone only
+		-- catches nil, not this.
+		if not icon or icon == "" then icon = "Interface\\Icons\\INV_Misc_QuestionMark" end
+		currencyIcon:SetTexture(icon)
 		currencyText:SetText(tostring(count))
 	end
 	RefreshCurrencyText()
