@@ -669,8 +669,14 @@ end
 -- single-number version for everywhere else (ranking scans, weapon
 -- comparisons) that doesn't need this extra detail.
 function GW.GetItemScoreBreakdownVsEquipped(itemLink, equippedLink)
-	local candidateStats = GW.GetItemStats(itemLink)
-	if not candidateStats then return nil end
+	local rawCandidateStats = GW.GetItemStats(itemLink)
+	if not rawCandidateStats then return nil end
+	-- GW.GetItemStats reuses one shared scratch table across every call - a
+	-- second call for equippedLink below would otherwise silently overwrite
+	-- this same table, leaving candidateStats and equippedStats aliased to
+	-- the exact same (now-equipped-only) data and every diff computing to 0.
+	local candidateStats = {}
+	for k, v in pairs(rawCandidateStats) do candidateStats[k] = v end
 	local equippedStats = equippedLink and GW.GetItemStats(equippedLink) or nil
 	local profile = GW.GetActiveProfile()
 	local known = GW.GetKnownStats()

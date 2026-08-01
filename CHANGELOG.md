@@ -22,7 +22,7 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.46 - 2026-07-29
+## v1.26.47 - 2026-07-29
 
 ### New: Tooltip score breakdown
 - The "GearWeights: X.X" tooltip line now shows a per-stat breakdown underneath it (e.g. "+20 Spell Power (+6.0)"), so it's clear exactly which stats are driving the score. Each stat's contribution is relative to whatever this item would actually replace, not the item's own absolute stat value - so a stat you'd have less of than what you're already wearing correctly shows as a downgrade for that one line, even while other stats make the item an overall upgrade. Falls back to plain absolute contributions when there's nothing to compare against (an empty slot, or a Two-Handed weapon, whose comparison is a combined score rather than a single item). Only stats this profile actually weights are shown, biggest contribution first.
