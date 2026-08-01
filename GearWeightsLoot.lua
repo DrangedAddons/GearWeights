@@ -1706,6 +1706,31 @@ dungeonRankTriggerFrame:SetScript("OnEvent", function(self, event)
 	end
 end)
 
+-- Detects a spec change and reacts to it the same way PLAYER_EQUIPMENT_CHANGED
+-- already does above, so the ranking scan (and weapon baseline boxes) always
+-- reflect whichever spec just became active instead of only showing a
+-- passive "(spec changed since this scan)" note until you remember to
+-- rescan yourself. There's no reliable event for a pure spec swap on this
+-- custom classless server - PLAYER_EQUIPMENT_CHANGED only fires if the swap
+-- also happened to change your gear - so this is polled instead of guessed
+-- at; GW.GetCurrentSpecId() is cheap enough that a plain periodic check is
+-- no real cost.
+local specChangeLastSeenSpecId = GW.GetCurrentSpecId()
+local specChangePollElapsed = 0
+local specChangeWatchFrame = CreateFrame("Frame")
+specChangeWatchFrame:SetScript("OnUpdate", function(self, elapsed)
+	specChangePollElapsed = specChangePollElapsed + elapsed
+	if specChangePollElapsed < 2 then return end
+	specChangePollElapsed = 0
+	local currentSpecId = GW.GetCurrentSpecId()
+	if currentSpecId ~= specChangeLastSeenSpecId then
+		specChangeLastSeenSpecId = currentSpecId
+		GW.SyncWeaponBoxesFromEquipped()
+		if GW.RefreshWeaponBaselineDisplay then GW.RefreshWeaponBaselineDisplay() end
+		ScheduleDungeonRankRescan()
+	end
+end)
+
 -- Called from the Stat Weights tab whenever a weight value or profile import
 -- changes, so a rescan reflects the update instead of only reacting to gear.
 function GW.NotifyWeightsChanged()
