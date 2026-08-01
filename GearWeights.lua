@@ -655,6 +655,31 @@ function GW.GetItemScore(itemLink)
 	return score, stats
 end
 
+-- Per-stat breakdown of an item's score: which canonical stats it has, their
+-- raw values, this profile's weight for each, and the resulting contribution
+-- (value * weight) - only stats that actually contribute something non-zero,
+-- sorted biggest contribution first. Used for the tooltip's "where does this
+-- number come from" breakdown; GW.GetItemScore above stays the fast,
+-- single-number version for everywhere else (ranking scans, weapon
+-- comparisons) that doesn't need this extra detail.
+function GW.GetItemScoreBreakdown(itemLink)
+	local stats = GW.GetItemStats(itemLink)
+	if not stats then return nil end
+	local profile = GW.GetActiveProfile()
+	local known = GW.GetKnownStats()
+	local breakdown = {}
+	for key, value in pairs(stats) do
+		if type(value) == "number" and GW.IsCanonicalStatKey(key) then
+			local w = profile.weights[key]
+			if w and w ~= 0 then
+				table.insert(breakdown, { label = known[key] or key, value = value, weight = w, contribution = value * w })
+			end
+		end
+	end
+	table.sort(breakdown, function(a, b) return math.abs(a.contribution) > math.abs(b.contribution) end)
+	return breakdown
+end
+
 --------------------------------------------------------------------------------
 -- Import / Export (bisbeard.com stat weight format)
 --------------------------------------------------------------------------------
@@ -963,6 +988,18 @@ local function AppendScoreLines(tooltip, itemLink)
 
 	tooltip:AddLine(" ")
 	tooltip:AddLine(string.format("GearWeights: %.1f", score), 0.4, 0.75, 1.0)
+
+	-- Per-stat breakdown of where that number comes from - only stats this
+	-- profile actually weights (zero-weighted stats on the item are omitted
+	-- rather than cluttering the tooltip with contributions of 0), biggest
+	-- contribution first.
+	local breakdown = GW.GetItemScoreBreakdown(itemLink)
+	if breakdown then
+		for _, entry in ipairs(breakdown) do
+			local color = entry.contribution >= 0 and "|cff00ff00" or "|cffff4444"
+			tooltip:AddLine(string.format("  %+.0f %s (%s%.1f|r)", entry.value, entry.label, color, entry.contribution), 0.7, 0.7, 0.7)
+		end
+	end
 
 	if not equipLoc then
 		tooltip:Show()
