@@ -1090,6 +1090,26 @@ end
 
 GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
 
+-- Per-stat breakdown of where the score comes from, relative to whatever
+-- this would actually replace (same equipped item GW.GetBestUpgradeDiff
+-- itself compares against) rather than each stat's absolute contribution -
+-- so a stat this item has less of than what's equipped shows as a real
+-- downgrade even though the item's own tooltip states a positive value for
+-- it. Falls back to absolute contributions when there's nothing to compare
+-- against (empty slot, or a 2H weapon, whose comparison is a combined score
+-- rather than a single item). Appended after the Upgrade/Downgrade verdict
+-- line(s) further up the tooltip rather than before them - the breakdown
+-- explains a verdict you've already seen, not the reverse.
+local function AppendScoreBreakdown(tooltip, itemLink)
+	local _, _, _, _, breakdownEquippedLink = GW.GetBestUpgradeDiff(itemLink)
+	local breakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, breakdownEquippedLink)
+	if not breakdown then return end
+	for _, entry in ipairs(breakdown) do
+		local color = entry.contribution >= 0 and "|cff00ff00" or "|cffff4444"
+		tooltip:AddLine(string.format("  %+.0f %s (%s%+.1f|r)", entry.displayValue, entry.label, color, entry.contribution), 0.7, 0.7, 0.7)
+	end
+end
+
 -- Cross-spec comparison (Settings tab: Spec Comparisons) - appended at the
 -- very end of every equippable item's tooltip, below the active spec's own
 -- score/breakdown/comparison lines, one section per other spec the user has
@@ -1162,24 +1182,8 @@ local function AppendScoreLines(tooltip, itemLink)
 	tooltip:AddLine(" ")
 	tooltip:AddLine(string.format("GearWeights: %.1f", score), 0.4, 0.75, 1.0)
 
-	-- Per-stat breakdown of where that number comes from, relative to
-	-- whatever this would actually replace (same equipped item
-	-- GW.GetBestUpgradeDiff itself compares against) rather than each stat's
-	-- absolute contribution - so a stat this item has less of than what's
-	-- equipped shows as a real downgrade even though the item's own tooltip
-	-- states a positive value for it. Falls back to absolute contributions
-	-- when there's nothing to compare against (empty slot, or a 2H weapon,
-	-- whose comparison is a combined score rather than a single item).
-	local _, _, _, _, breakdownEquippedLink = GW.GetBestUpgradeDiff(itemLink)
-	local breakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, breakdownEquippedLink)
-	if breakdown then
-		for _, entry in ipairs(breakdown) do
-			local color = entry.contribution >= 0 and "|cff00ff00" or "|cffff4444"
-			tooltip:AddLine(string.format("  %+.0f %s (%s%+.1f|r)", entry.displayValue, entry.label, color, entry.contribution), 0.7, 0.7, 0.7)
-		end
-	end
-
 	if not equipLoc then
+		AppendScoreBreakdown(tooltip, itemLink)
 		tooltip:Show()
 		return
 	end
@@ -1276,6 +1280,7 @@ local function AppendScoreLines(tooltip, itemLink)
 				end
 			end
 		end
+		AppendScoreBreakdown(tooltip, itemLink)
 		AppendSpecComparisons(tooltip, itemLink)
 		tooltip:Show()
 		return
@@ -1300,6 +1305,7 @@ local function AppendScoreLines(tooltip, itemLink)
 	for _, slotId in ipairs(slots) do
 		if slotId ~= INVSLOT_MAINHAND and slotId ~= INVSLOT_OFFHAND
 			and GW.GetEquippedLinkForScoring(slotId) == itemLink then
+			AppendScoreBreakdown(tooltip, itemLink)
 			AppendSpecComparisons(tooltip, itemLink)
 			tooltip:Show()
 			return
@@ -1448,6 +1454,7 @@ local function AppendScoreLines(tooltip, itemLink)
 		end
 	end
 
+	AppendScoreBreakdown(tooltip, itemLink)
 	AppendSpecComparisons(tooltip, itemLink)
 	tooltip:Show()
 end

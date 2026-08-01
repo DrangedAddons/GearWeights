@@ -22,7 +22,13 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.50 - 2026-07-29
+## v1.26.51 - 2026-08-01
+
+### Fixes
+- Moved the tooltip's per-stat score breakdown to render AFTER the Upgrade/Downgrade verdict line(s) instead of before - the breakdown explains a verdict you've already seen, not the reverse.
+
+<details>
+<summary>v1.26.50 - 2026-07-29</summary>
 
 ### New: Cross-spec tooltip comparison
 - Item tooltips can now show whether a candidate is also an upgrade for OTHER specs, not just whichever one you're actively playing - scored against that spec's own saved stat weights, shown below the active spec's own score/breakdown.
@@ -34,6 +40,8 @@ the actual section further down):
 
 ### Dungeon/Raid Ranking Panel
 - A spec change now automatically re-runs the ranking scan (and re-syncs the weapon baseline boxes), so results always reflect whichever spec just became active instead of sitting stale with just a passive "(spec changed since this scan)" note until you remember to rescan yourself. Polled rather than event-driven, since there's no reliable event for a pure spec swap that doesn't also change your gear.
+
+</details>
 
 <details>
 <summary>v1.26.47 - 2026-07-29</summary>
