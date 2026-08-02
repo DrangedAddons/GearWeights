@@ -957,11 +957,48 @@ end
 -- itself driven by live equip-change events for whichever spec IS active.
 --------------------------------------------------------------------------------
 
+-- Blizzard's own GetEquipmentSetItemIDs only exposes bare item IDs (no
+-- gems/enchants), and on this server has actually been observed returning
+-- nothing for a slot that was confirmed to genuinely have an item saved -
+-- unreliable enough not to trust as the primary source. Instead, snapshot
+-- each set's contents ourselves (full item links, gems/enchants and all)
+-- the moment it's saved, via the same GetInventoryItemLink already trusted
+-- for live gear elsewhere in this addon - see the SaveEquipmentSet hook
+-- below. Keyed per-character, since Equipment Set names are per-character.
+local function EnsureEquipmentSetSnapshots()
+	GearWeightsDB = GearWeightsDB or {}
+	GearWeightsDB.equipmentSetSnapshots = GearWeightsDB.equipmentSetSnapshots or {}
+	local charKey = GW.GetCurrentCharacterKey()
+	GearWeightsDB.equipmentSetSnapshots[charKey] = GearWeightsDB.equipmentSetSnapshots[charKey] or {}
+	return GearWeightsDB.equipmentSetSnapshots[charKey]
+end
+
+-- Every current WoW client fires this on both creating a NEW set and
+-- updating/overwriting an existing one - either way, "what's equipped right
+-- now" is exactly what Blizzard's own Equipment Manager is about to save.
+if SaveEquipmentSet then
+	hooksecurefunc("SaveEquipmentSet", function(name)
+		if not name then return end
+		local perCharSnapshots = EnsureEquipmentSetSnapshots()
+		local snapshot = {}
+		for slotId = 1, 19 do
+			snapshot[slotId] = GetInventoryItemLink("player", slotId)
+		end
+		perCharSnapshots[name] = snapshot
+	end)
+end
+
 -- The item this Equipment Set has saved for a given inventory slot, as a
--- plain (unenchanted/ungemmed) item link - nil if the set doesn't exist,
--- doesn't have anything saved for that slot, or the item isn't cached yet.
+-- full item link (gems/enchants included) from our own snapshot if this set
+-- has been saved at least once since this feature shipped; falls back to
+-- Blizzard's own (itemID-only, less reliable on this server) API for a set
+-- that hasn't been re-saved yet. nil if neither has anything for this slot.
 function GW.GetEquipmentSetItemLink(setName, slotId)
 	if not setName or not slotId then return nil end
+	local perCharSnapshots = EnsureEquipmentSetSnapshots()
+	local snapshot = perCharSnapshots[setName]
+	if snapshot and snapshot[slotId] then return snapshot[slotId] end
+
 	local ok, itemIDs = pcall(GetEquipmentSetItemIDs, setName)
 	if not ok or not itemIDs then return nil end
 	local itemID = itemIDs[slotId]

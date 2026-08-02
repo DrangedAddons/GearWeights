@@ -22,10 +22,11 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.59 - 2026-08-01
+## v1.26.60 - 2026-08-01
 
 ### Fixes
-- Fixed the cross-spec tooltip comparison confidently claiming a candidate was a big "Upgrade" for another spec when that spec's Equipment Set had no item saved for that slot - treated the same as a genuinely empty slot (counting the full score as the diff), when a missing slot is far more likely to mean the Equipment Set is stale/incomplete (Equipment Sets don't auto-sync with what's actually equipped). Now shows "No reference for this slot in this spec's Equipment Set" instead of guessing at a verdict - re-saving that spec's Equipment Set with current gear will restore a real comparison.
+- Fixed the cross-spec tooltip comparison's Equipment Set lookup being unreliable on this server - confirmed a case where an item was genuinely saved in a set but Blizzard's own GetEquipmentSetItemIDs still returned nothing for that slot. Now snapshots each set's actual contents (full item links, gems/enchants included) ourselves at the moment it's saved, via the same live-gear API already trusted elsewhere in this addon, instead of relying on that API to report it correctly after the fact. **Existing Equipment Sets need to be re-saved once (Update in the Equipment Manager) for this snapshot to exist** - until then it falls back to the old, less reliable lookup.
+- Fixed the cross-spec tooltip comparison confidently claiming a candidate was a big "Upgrade" for another spec when that spec's Equipment Set had no item saved for that slot - treated the same as a genuinely empty slot (counting the full score as the diff), when a missing slot is far more likely to mean the Equipment Set is stale/incomplete (Equipment Sets don't auto-sync with what's actually equipped). Now shows "No reference for this slot in this spec's Equipment Set" instead of guessing at a verdict.
 
 <details>
 <summary>v1.26.58 - 2026-08-01</summary>
