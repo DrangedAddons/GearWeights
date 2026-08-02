@@ -22,7 +22,13 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.58 - 2026-08-01
+## v1.26.59 - 2026-08-01
+
+### Fixes
+- Fixed the cross-spec tooltip comparison confidently claiming a candidate was a big "Upgrade" for another spec when that spec's Equipment Set had no item saved for that slot - treated the same as a genuinely empty slot (counting the full score as the diff), when a missing slot is far more likely to mean the Equipment Set is stale/incomplete (Equipment Sets don't auto-sync with what's actually equipped). Now shows "No reference for this slot in this spec's Equipment Set" instead of guessing at a verdict - re-saving that spec's Equipment Set with current gear will restore a real comparison.
+
+<details>
+<summary>v1.26.58 - 2026-08-01</summary>
 
 ### Fixes
 - Fixed weapon/armor proficiency detection incorrectly reporting "Unusable by your class" for a skill the character genuinely has, on classes whose Skills pane lists a separate "One-/Two-Handed X" line rather than the stock-WoW convention of one shared "X" line for both variants - confirmed via a real item dump (itemSubType "Two-Handed Maces" matching the Skills pane's own line name exactly, but the code only ever checked for a line named "Maces"). Now checks the raw skill-line name first, before falling back to the translated short form.
@@ -31,6 +37,8 @@ the actual section further down):
 - Fixed confusing/ambiguous weapon comparison framing on Two-Handed weapon tooltips: "Combo vs Two-Hand" reused "Two-Hand" to mean the candidate itself in one line, right after using it to mean your tracked Two-Hand box in the line above - genuinely ambiguous, not just inconsistently worded. Now reads "vs Combo", consistently framed with the candidate as the subject throughout (matching "vs Two-Hand" above it), the same way Main-Hand/Off-Hand candidates were already framed with the resulting Combo as the subject.
 - Added an explicit "[!] This would make X your better loadout" note on weapon tooltips when a candidate would flip which loadout (Two-Hand vs Combo) scores higher overall - the same flip check that already drives the ranking list's own [!] marker, now also surfaced directly on the tooltip itself.
 - Fixed the bottom-bar Mark of Triumph icon showing as a blank/broken texture for a character with 0 of that currency - the item-count fallback path only fetched the icon when the count was greater than 0, and a currency-list icon that comes back as an empty string wasn't being caught by the existing nil-only fallback either.
+
+</details>
 
 <details>
 <summary>v1.26.53 - 2026-08-01</summary>

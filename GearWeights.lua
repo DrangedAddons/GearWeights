@@ -991,22 +991,30 @@ function GW.GetSpecComparisonForItem(itemLink, specId, setName)
 	local bestDiff, bestEquippedLink, sawAnySlot
 	for _, slotId in ipairs(slots) do
 		local equippedLink = GW.GetEquipmentSetItemLink(setName, slotId)
-		local diff
-		if not equippedLink then
-			diff = score
-		elseif equippedLink ~= itemLink then
+		-- Unlike GW.GetBestUpgradeDiff's own live-inventory check, no item
+		-- here does NOT mean "empty slot" - Equipment Sets are a manually
+		-- maintained snapshot that doesn't auto-sync with what's actually
+		-- equipped, so a missing slot far more often means the set is just
+		-- stale/incomplete than that the spec genuinely has nothing there.
+		-- Confidently counting the candidate's full score as an "Upgrade"
+		-- in that case was the actual bug behind a candidate showing as a
+		-- huge upgrade for another spec cross-spec, while that exact same
+		-- item correctly scored as a downgrade once that spec became active
+		-- (and so got compared against the real, live-equipped item
+		-- instead) - skip the slot entirely instead of guessing.
+		if equippedLink and equippedLink ~= itemLink then
 			local equippedScore = GW.GetItemScore(equippedLink, specId)
-			if equippedScore then diff = score - equippedScore end
-		end
-		if diff then
-			sawAnySlot = true
-			if not bestDiff or diff > bestDiff then
-				bestDiff = diff
-				bestEquippedLink = equippedLink
+			if equippedScore then
+				local diff = score - equippedScore
+				sawAnySlot = true
+				if not bestDiff or diff > bestDiff then
+					bestDiff = diff
+					bestEquippedLink = equippedLink
+				end
 			end
 		end
 	end
-	if not sawAnySlot then return nil end
+	if not sawAnySlot then return score, nil, nil end
 
 	return score, bestDiff, bestEquippedLink
 end
@@ -1170,6 +1178,12 @@ local function AppendSpecComparisons(tooltip, itemLink)
 				else
 					tooltip:AddLine("  |cffffff00Sidegrade (~equal)|r")
 				end
+			else
+				-- No item in this slot in the assigned Equipment Set - most
+				-- likely the set is stale/incomplete rather than this spec
+				-- genuinely having nothing equipped there, so say that
+				-- plainly instead of guessing at a verdict.
+				tooltip:AddLine("  |cff888888No reference for this slot in this spec's Equipment Set|r")
 			end
 			if fullBreakdown then
 				local specBreakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, specEquippedLink, target.specId)
