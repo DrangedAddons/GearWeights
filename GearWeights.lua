@@ -318,14 +318,22 @@ local subTypeSkillCandidates = {
 
 local function HasProficiencyFor(itemSubType)
 	if not proficiencySet then proficiencySet = BuildProficiencySet() end
+	-- Check the raw itemSubType as a skill line name FIRST, before falling
+	-- back to the translated candidates - confirmed via a real "Two-Handed
+	-- Maces" dump (itemSubType matches the Skills pane's own skill line name
+	-- exactly on this server) that some classes here have separate "One-/
+	-- Two-Handed X" skill lines rather than the stock-WoW convention of one
+	-- shared "X" line for both. The old candidates-only path never checked
+	-- the raw name at all once a translation existed, so it silently
+	-- reported "no proficiency" for a skill the character genuinely had.
+	if proficiencySet[itemSubType] then return true end
 	local candidates = subTypeSkillCandidates[itemSubType]
 	if candidates then
 		for _, name in ipairs(candidates) do
 			if proficiencySet[name] then return true end
 		end
-		return false
 	end
-	return proficiencySet[itemSubType] == true
+	return false
 end
 
 -- Neither proficiencySet nor usabilityCache (GW.IsItemUsable below) ever got

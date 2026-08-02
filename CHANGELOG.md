@@ -22,9 +22,10 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.57 - 2026-08-01
+## v1.26.58 - 2026-08-01
 
 ### Fixes
+- Fixed weapon/armor proficiency detection incorrectly reporting "Unusable by your class" for a skill the character genuinely has, on classes whose Skills pane lists a separate "One-/Two-Handed X" line rather than the stock-WoW convention of one shared "X" line for both variants - confirmed via a real item dump (itemSubType "Two-Handed Maces" matching the Skills pane's own line name exactly, but the code only ever checked for a line named "Maces"). Now checks the raw skill-line name first, before falling back to the translated short form.
 - Fixed weapon/armor usability checks getting stuck stale for the rest of the session - the proficiency scan (Skills pane) and its per-item usability cache were never invalidated after their first computation, so a character who gained a new weapon skill (or swapped to a build granting different ones) mid-session could keep seeing "Unusable by your class" on an item they could now actually use, until a full /reload. Now cleared on SKILL_LINES_CHANGED, the event that fires exactly when the Skills pane's own data changes.
 - Fixed the Stat Weights tab's "Weight" column header drifting out of alignment with the actual weight edit boxes when the window is resized - the header tracked the scroll frame's width, but the row/edit-box widths stayed fixed at their original size. Both now resize together, same approach already used on the Instance Loot tab.
 - Fixed confusing/ambiguous weapon comparison framing on Two-Handed weapon tooltips: "Combo vs Two-Hand" reused "Two-Hand" to mean the candidate itself in one line, right after using it to mean your tracked Two-Hand box in the line above - genuinely ambiguous, not just inconsistently worded. Now reads "vs Combo", consistently framed with the candidate as the subject throughout (matching "vs Two-Hand" above it), the same way Main-Hand/Off-Hand candidates were already framed with the resulting Combo as the subject.
