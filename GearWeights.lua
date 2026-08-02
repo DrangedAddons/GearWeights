@@ -328,6 +328,22 @@ local function HasProficiencyFor(itemSubType)
 	return proficiencySet[itemSubType] == true
 end
 
+-- Neither proficiencySet nor usabilityCache (GW.IsItemUsable below) ever got
+-- invalidated after their first computation - fine for a stock class, whose
+-- weapon/armor proficiencies never change mid-session, but on this classless
+-- server a character can gain new weapon skills (or swap to a build that
+-- grants different ones) without relogging, and the cached-forever "Unusable
+-- by your class" verdict from before that point would otherwise stick for
+-- the rest of the session. SKILL_LINES_CHANGED fires exactly when the
+-- Skills pane's own data changes, so that's the correct trigger to clear
+-- both caches and let the next check recompute fresh.
+local proficiencyWatchFrame = CreateFrame("Frame")
+proficiencyWatchFrame:RegisterEvent("SKILL_LINES_CHANGED")
+proficiencyWatchFrame:SetScript("OnEvent", function()
+	proficiencySet = nil
+	wipe(usabilityCache)
+end)
+
 -- Exposed for the Settings tab's armor-type filter - same skill-proficiency
 -- scan GW.IsItemUsable already uses for real items, just callable directly
 -- with a known type name (e.g. "Plate") rather than needing an item link.
