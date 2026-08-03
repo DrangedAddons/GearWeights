@@ -22,10 +22,10 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.61 - 2026-08-01
+## v1.26.62 - 2026-08-01
 
 ### Fixes
-- Fixed scored items whose stats haven't finished server-side scaling giving actively wrong scores/upgrade verdicts - confirmed via a real item where GetItemStats() reported +13 Spell Power/+11 Intellect while the item's own tooltip stated +4/+3 for those same stats (a scaled item, per AtlasLoot's own "Scaled item stats do not compare correctly!" warning on it). Rather than try to reproduce this server's scaling formula, GetItemStats()'s numbers are now cross-checked against what the item's own tooltip currently states for the same stats - on a meaningful mismatch, the item is treated as un-scored (no score, no upgrade/downgrade claim, no ranking-list entry) instead of confidently reporting a wrong number. The tooltip shows "Scaling not yet resolved - re-check this item" in that case so it doesn't just look broken.
+- Fixed scaled items (pre-level-60 dungeon/world drops - level 60 heroic/mythic dungeon and all raid loot is fixed and unaffected) giving actively wrong scores/upgrade verdicts - GetItemStats() returns the same cached snapshot regardless of which character asks, insensitive to the per-character level-scaling the item's own tooltip resolves live every time. Confirmed via a real item where GetItemStats() reported +13 Spell Power/+11 Intellect for one character while their own tooltip stated +4/+3, and a second character's dump showing GetItemStats() returning that same +13/+11 as their own correct, matching value. Rather than try to reproduce this server's scaling formula, the item's own tooltip - always correct for whoever's looking at it - now CORRECTS GetItemStats()'s numbers wherever they disagree, for every score computed anywhere in the addon (tooltip hover and the ranking scan both). A corrected item's tooltip shows "(scaled item - stats corrected to match this tooltip)" so it's clear a correction happened.
 
 <details>
 <summary>v1.26.60 - 2026-08-01</summary>
