@@ -22,10 +22,11 @@ the actual section further down):
 </details>
 -->
 
-## v1.26.62 - 2026-08-01
+## v1.26.63 - 2026-08-01
 
 ### Fixes
 - Fixed scaled items (pre-level-60 dungeon/world drops - level 60 heroic/mythic dungeon and all raid loot is fixed and unaffected) giving actively wrong scores/upgrade verdicts - GetItemStats() returns the same cached snapshot regardless of which character asks, insensitive to the per-character level-scaling the item's own tooltip resolves live every time. Confirmed via a real item where GetItemStats() reported +13 Spell Power/+11 Intellect for one character while their own tooltip stated +4/+3, and a second character's dump showing GetItemStats() returning that same +13/+11 as their own correct, matching value. Rather than try to reproduce this server's scaling formula, the item's own tooltip - always correct for whoever's looking at it - now CORRECTS GetItemStats()'s numbers wherever they disagree, for every score computed anywhere in the addon (tooltip hover and the ranking scan both). A corrected item's tooltip shows "(scaled item - stats corrected to match this tooltip)" so it's clear a correction happened.
+- Added a "-- Scaling correction --" section to `/gw dumphover`/`/gw dump` showing exactly what got parsed off the item's tooltip and how it compared against each raw stat, for diagnosing a case where the correction still isn't kicking in as expected.
 
 <details>
 <summary>v1.26.60 - 2026-08-01</summary>

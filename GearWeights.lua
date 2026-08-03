@@ -1805,6 +1805,29 @@ local function DumpItemDiagnostics(itemLink)
 		end
 	end
 
+	DEFAULT_CHAT_FRAME:AddMessage("-- Scaling correction --")
+	local tooltipValues = GetTooltipStatValues(itemLink)
+	if not tooltipValues then
+		DEFAULT_CHAT_FRAME:AddMessage("  GetTooltipStatValues() = nil (SetHyperlink failed on the scan tooltip)")
+	elseif next(tooltipValues) == nil then
+		DEFAULT_CHAT_FRAME:AddMessage("  GetTooltipStatValues() found nothing parseable on this tooltip")
+	else
+		DEFAULT_CHAT_FRAME:AddMessage("  Parsed from tooltip text:")
+		for phrase, amount in pairs(tooltipValues) do
+			DEFAULT_CHAT_FRAME:AddMessage("    \"" .. phrase .. "\" = " .. tostring(amount))
+		end
+	end
+	local known = GearWeightsDB and GearWeightsDB.knownStats
+	DEFAULT_CHAT_FRAME:AddMessage("  Per-stat comparison (raw key | known label | tooltip match):")
+	for k, v in pairs(stats) do
+		if type(v) == "number" then
+			local label = known and known[k]
+			local tooltipMatch = label and tooltipValues and tooltipValues[strlower(label)]
+			DEFAULT_CHAT_FRAME:AddMessage(string.format("    %s = %s | label=%s | tooltipValue=%s",
+				tostring(k), tostring(v), tostring(label), tostring(tooltipMatch)))
+		end
+	end
+
 	DEFAULT_CHAT_FRAME:AddMessage("-- Usability --")
 	local playerClass, classToken = UnitClass("player")
 	DEFAULT_CHAT_FRAME:AddMessage("  UnitClass(player) = " .. tostring(playerClass) .. " (" .. tostring(classToken) .. ")")
