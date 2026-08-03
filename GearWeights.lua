@@ -751,12 +751,19 @@ local function GetRawItemStats(itemLink)
 	return scanTable
 end
 
--- For every stat GetItemStats() reports, if this item's own tooltip states
--- a materially different value for that same stat, the tooltip's number
--- wins. liveTooltip is optional - pass the tooltip ALREADY showing this
--- item (e.g. from AppendScoreLines) to read its lines directly rather than
--- falling back to a separate scan tooltip. Returns the (possibly corrected)
--- stats table, and whether anything was actually corrected.
+-- For every stat GetItemStats() reports, if this item's own tooltip states a
+-- different value for that same stat, the tooltip's number wins - outright,
+-- with no "is this close enough to trust GetItemStats" tolerance. A scaled
+-- item can have up to ~60 different cached variants (one per character
+-- level), and a wrong variant can easily land within any fixed tolerance of
+-- the real value (e.g. raw 15 vs a real, tooltip-stated 17 is only ~13%
+-- off - comfortably inside a 15% tolerance, yet still the wrong number).
+-- The tooltip is always resolved live for whoever's actually looking at it,
+-- so it's trusted unconditionally rather than judged for plausibility.
+-- liveTooltip is optional - pass the tooltip ALREADY showing this item (e.g.
+-- from AppendScoreLines) to read its lines directly rather than falling back
+-- to a separate scan tooltip. Returns the (possibly corrected) stats table,
+-- and whether anything was actually corrected.
 local function CorrectStatsAgainstTooltip(itemLink, rawStats, liveTooltip)
 	local tooltipValues = liveTooltip and ParseTooltipStatLines(liveTooltip) or ScanItemTooltipStatValues(itemLink)
 	local known = GearWeightsDB and GearWeightsDB.knownStats
@@ -769,7 +776,7 @@ local function CorrectStatsAgainstTooltip(itemLink, rawStats, liveTooltip)
 		if type(value) == "number" and value ~= 0 then
 			local label = known[key]
 			local tooltipValue = label and tooltipValues[strlower(label)]
-			if tooltipValue and math.abs(tooltipValue - value) > math.max(0.5, value * 0.15) then
+			if tooltipValue and tooltipValue ~= value then
 				if not corrected then
 					corrected = {}
 					for k, v in pairs(rawStats) do corrected[k] = v end
