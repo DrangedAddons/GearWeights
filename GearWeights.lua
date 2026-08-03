@@ -673,13 +673,103 @@ local function RegisterDiscoveredStats(stats)
 	end
 end
 
-function GW.GetItemStats(itemLink)
+-- Some items on this server carry "scaled" stats where GetItemStats() can
+-- report a different (often larger) snapshot than what the item's own
+-- tooltip currently displays - confirmed via a real side-by-side where
+-- GetItemStats() reported +13 Spell Power/+11 Intellect on an item whose own
+-- tooltip stated +4/+3 for those same stats (AtlasLoot's own "Scaled item
+-- stats do not compare correctly!" warning line flags exactly this on
+-- affected items). Scoring off a value the item doesn't actually have right
+-- now would be actively misleading, so the tooltip's own displayed numbers
+-- are cross-checked against GetItemStats() before either is trusted -
+-- rather than try to reproduce whatever scaling formula this server uses.
+local scalingCheckTip
+local scalingPendingCache = {}
+
+local function GetTooltipStatValues(itemLink)
+	if not scalingCheckTip then
+		scalingCheckTip = CreateFrame("GameTooltip", "GearWeightsScalingCheckTooltip", nil, "GameTooltipTemplate")
+		scalingCheckTip:SetOwner(UIParent, "ANCHOR_NONE")
+	end
+	scalingCheckTip:ClearLines()
+	local ok = pcall(scalingCheckTip.SetHyperlink, scalingCheckTip, itemLink)
+	if not ok then return nil end
+	local values = {}
+	for i = 1, scalingCheckTip:NumLines() do
+		local fs = _G["GearWeightsScalingCheckTooltipTextLeft" .. i]
+		local text = fs and fs:GetText()
+		if text then
+			-- Two shapes cover the vast majority of stat lines: an "Equip:"
+			-- bonus ("Equip: Increases spell power by 4.") and a plain base
+			-- stat ("+3 Intellect"). Summed per stat name in case an item
+			-- states the same stat both ways.
+			local phrase, amount = strmatch(text, "^Equip: %a+ (.-) by ([%d%.]+)%%?%.?$")
+			if not phrase then
+				amount, phrase = strmatch(text, "^%+([%d%.]+) (.+)$")
+			end
+			if phrase and amount then
+				local key = strlower(phrase)
+				values[key] = (values[key] or 0) + tonumber(amount)
+			end
+		end
+	end
+	return values
+end
+
+-- itemLink identifies WHICH item to scan for tooltip text; stats is the
+-- already-fetched GetItemStats() result to check it against. Cached per
+-- itemLink - this scans the item's own tooltip, not free, and the result
+-- for a given item never changes within a session.
+local function HasUnresolvedScaling(itemLink, stats)
+	local cached = scalingPendingCache[itemLink]
+	if cached ~= nil then return cached end
+
+	local result = false
+	local tooltipValues = GetTooltipStatValues(itemLink)
+	local known = GearWeightsDB and GearWeightsDB.knownStats
+	if tooltipValues and next(tooltipValues) and known then
+		for key, value in pairs(stats) do
+			if type(value) == "number" and value ~= 0 then
+				local label = known[key]
+				local tooltipValue = label and tooltipValues[strlower(label)]
+				if tooltipValue and math.abs(tooltipValue - value) > math.max(0.5, value * 0.15) then
+					result = true
+					break
+				end
+			end
+		end
+	end
+
+	scalingPendingCache[itemLink] = result
+	return result
+end
+
+-- Ungated fetch shared by GW.GetItemStats and GW.IsScalingPending below - a
+-- single source so the scaling gate itself can inspect the raw stats
+-- without going through the gate it's implementing.
+local function GetRawItemStats(itemLink)
 	if not itemLink then return nil end
 	wipe(scanTable)
 	local ok = pcall(GetItemStats, itemLink, scanTable)
 	if not ok or next(scanTable) == nil then return nil end
-	RegisterDiscoveredStats(scanTable)
 	return scanTable
+end
+
+-- Exposed so the tooltip display can explain a missing score as "scaling
+-- not yet resolved" specifically, rather than staying silent the same way
+-- it does for an item with no stats at all.
+function GW.IsScalingPending(itemLink)
+	local stats = GetRawItemStats(itemLink)
+	if not stats then return false end
+	return HasUnresolvedScaling(itemLink, stats)
+end
+
+function GW.GetItemStats(itemLink)
+	local stats = GetRawItemStats(itemLink)
+	if not stats then return nil end
+	RegisterDiscoveredStats(stats)
+	if HasUnresolvedScaling(itemLink, stats) then return nil end
+	return stats
 end
 
 -- specId is optional - omit it (or pass nil) to score against your current
@@ -1262,7 +1352,17 @@ local function AppendScoreLines(tooltip, itemLink)
 	end
 
 	local score = GW.GetItemScore(itemLink)
-	if not score then return end
+	if not score then
+		-- Distinguish "this item's stats don't match its own tooltip yet"
+		-- (a real, actionable state worth explaining) from "no stats at
+		-- all" (silently nothing to score, unchanged default behavior).
+		if GW.IsScalingPending(itemLink) then
+			tooltip:AddLine(" ")
+			tooltip:AddLine("|cffff8800GearWeights: Scaling not yet resolved - re-check this item|r", 0.4, 0.75, 1.0)
+			tooltip:Show()
+		end
+		return
+	end
 
 	local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
 
@@ -1701,6 +1801,7 @@ local function DumpItemDiagnostics(itemLink)
 	local okEquip, isEquippable = pcall(IsEquippableItem, itemLink)
 	DEFAULT_CHAT_FRAME:AddMessage("  IsEquippableItem() = " .. tostring(isEquippable) .. " (ok=" .. tostring(okEquip) .. ")")
 	DEFAULT_CHAT_FRAME:AddMessage("  GW.IsItemUsable() = " .. tostring(GW.IsItemUsable(itemLink)))
+	DEFAULT_CHAT_FRAME:AddMessage("  GW.IsScalingPending() = " .. tostring(GW.IsScalingPending(itemLink)))
 
 	DEFAULT_CHAT_FRAME:AddMessage("-- Tooltip text --")
 	local scanTip = _G["GearWeightsScanTooltip"]
