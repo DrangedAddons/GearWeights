@@ -673,65 +673,71 @@ local function RegisterDiscoveredStats(stats)
 	end
 end
 
--- Some items on this server carry "scaled" stats where GetItemStats() can
--- report a different snapshot than what the item's own tooltip currently
--- displays for the character actually looking at it - confirmed via a real
--- side-by-side where GetItemStats() reported +13 Spell Power/+11 Intellect
--- for a low-level character whose own tooltip stated +4/+3 for those same
--- stats (AtlasLoot's own "Scaled item stats do not compare correctly!"
--- warning line flags exactly this on affected items), and a second dump
--- proving GetItemStats() returns the SAME snapshot regardless of which
--- character asks - it behaves like a client-side cache keyed by item ID
--- alone, insensitive to the specific character's own level-based scaling
--- that the tooltip resolves live every time. Rather than try to reproduce
--- this server's scaling formula, the tooltip's own displayed numbers -
--- correct for whoever's actually looking at it right now, by definition -
--- are used to CORRECT GetItemStats()'s numbers wherever they disagree,
--- instead of just detecting the disagreement and refusing to score at all.
+-- Some items on this server carry "scaled" stats that settle once, shortly
+-- after the item drops and becomes lootable (visibly: a freshly-dropped
+-- item's tooltip shows one set of numbers, then updates to the scaled set a
+-- moment later) - and once actually looted, it's permanently fixed and
+-- never re-scales again. GetItemStats() doesn't reflect any of this -
+-- confirmed returning the same stale snapshot regardless of which
+-- character asks, or how long ago an item was looted.
+--
+-- Reading a SEPARATE, independently-created scan tooltip (SetHyperlink on a
+-- bare item link) turned out to be unreliable for an item you already own
+-- specifically - it appears to make the server treat the query like a
+-- fresh, still-scaling drop, rather than reporting the permanently-fixed
+-- value Blizzard's own tooltip already shows for that exact owned instance
+-- (via SetBagItem/SetInventoryItem/etc). So whenever a live tooltip is
+-- already displaying this item, ITS lines are read directly - never a
+-- separate one. A dedicated scan tooltip is only used as a fallback where
+-- no live tooltip exists at all (the background ranking scan, evaluating
+-- potential loot nobody has picked up yet).
 local scalingCheckTip
-local tooltipStatCache = {}
 
--- false (not nil) means "scanned, found nothing usable" - distinct from
--- "not scanned yet" - so a genuinely plain item doesn't get re-scanned.
-local function GetTooltipStatValues(itemLink)
-	local cached = tooltipStatCache[itemLink]
-	if cached ~= nil then return cached end
+-- Parses stat-bearing lines off an ALREADY-POPULATED tooltip frame, without
+-- issuing any new item query of our own.
+local function ParseTooltipStatLines(tooltipFrame)
+	local name = tooltipFrame and tooltipFrame.GetName and tooltipFrame:GetName()
+	if not name then return nil end
+	local values = {}
+	for i = 1, tooltipFrame:NumLines() do
+		local fs = _G[name .. "TextLeft" .. i]
+		local text = fs and fs:GetText()
+		if text then
+			-- Three shapes cover the vast majority of stat lines: an
+			-- "Equip:" bonus stated as "... by N" ("Equip: Increases spell
+			-- power by 4."), one stated as "Restores N X per 5 sec" (the
+			-- number comes first, not after "by"), and a plain base stat
+			-- ("+3 Intellect"). Summed per stat name in case an item states
+			-- the same stat more than one way.
+			local phrase, amount = strmatch(text, "^Equip: %a+ (.-) by ([%d%.]+)%%?%.?$")
+			if not phrase then
+				amount, phrase = strmatch(text, "^Equip: Restores ([%d%.]+) (.-) per 5 sec%.?$")
+			end
+			if not phrase then
+				amount, phrase = strmatch(text, "^%+([%d%.]+) (.+)$")
+			end
+			if phrase and amount then
+				local key = strlower(phrase)
+				values[key] = (values[key] or 0) + tonumber(amount)
+			end
+		end
+	end
+	return values
+end
 
+-- Fallback for when no live tooltip is available (the background ranking
+-- scan, scoring items nobody has looted yet) - a dedicated scan tooltip via
+-- SetHyperlink. Not cached - these are exactly the items still actively
+-- settling, so a stale cached read would be worse than a fresh one each time.
+local function ScanItemTooltipStatValues(itemLink)
 	if not scalingCheckTip then
 		scalingCheckTip = CreateFrame("GameTooltip", "GearWeightsScalingCheckTooltip", nil, "GameTooltipTemplate")
 		scalingCheckTip:SetOwner(UIParent, "ANCHOR_NONE")
 	end
 	scalingCheckTip:ClearLines()
 	local ok = pcall(scalingCheckTip.SetHyperlink, scalingCheckTip, itemLink)
-	local values = false
-	if ok then
-		values = {}
-		for i = 1, scalingCheckTip:NumLines() do
-			local fs = _G["GearWeightsScalingCheckTooltipTextLeft" .. i]
-			local text = fs and fs:GetText()
-			if text then
-				-- Three shapes cover the vast majority of stat lines: an
-				-- "Equip:" bonus stated as "... by N" ("Equip: Increases
-				-- spell power by 4."), one stated as "Restores N X per 5
-				-- sec" (the number comes first, not after "by"), and a
-				-- plain base stat ("+3 Intellect"). Summed per stat name in
-				-- case an item states the same stat more than one way.
-				local phrase, amount = strmatch(text, "^Equip: %a+ (.-) by ([%d%.]+)%%?%.?$")
-				if not phrase then
-					amount, phrase = strmatch(text, "^Equip: Restores ([%d%.]+) (.-) per 5 sec%.?$")
-				end
-				if not phrase then
-					amount, phrase = strmatch(text, "^%+([%d%.]+) (.+)$")
-				end
-				if phrase and amount then
-					local key = strlower(phrase)
-					values[key] = (values[key] or 0) + tonumber(amount)
-				end
-			end
-		end
-	end
-	tooltipStatCache[itemLink] = values
-	return values
+	if not ok then return nil end
+	return ParseTooltipStatLines(scalingCheckTip)
 end
 
 -- Ungated fetch of GetItemStats()'s own raw numbers, before any tooltip
@@ -747,10 +753,12 @@ end
 
 -- For every stat GetItemStats() reports, if this item's own tooltip states
 -- a materially different value for that same stat, the tooltip's number
--- wins. Returns the (possibly corrected) stats table, and whether anything
--- was actually corrected.
-local function CorrectStatsAgainstTooltip(itemLink, rawStats)
-	local tooltipValues = GetTooltipStatValues(itemLink)
+-- wins. liveTooltip is optional - pass the tooltip ALREADY showing this
+-- item (e.g. from AppendScoreLines) to read its lines directly rather than
+-- falling back to a separate scan tooltip. Returns the (possibly corrected)
+-- stats table, and whether anything was actually corrected.
+local function CorrectStatsAgainstTooltip(itemLink, rawStats, liveTooltip)
+	local tooltipValues = liveTooltip and ParseTooltipStatLines(liveTooltip) or ScanItemTooltipStatValues(itemLink)
 	local known = GearWeightsDB and GearWeightsDB.knownStats
 	if not tooltipValues or not known then
 		return rawStats, false
@@ -776,28 +784,30 @@ end
 -- Exposed for the tooltip display - true only when GetItemStats() and this
 -- item's own tooltip meaningfully disagreed and the score had to be
 -- corrected, so that can be flagged rather than looking like an ordinary
--- score.
-function GW.WasScalingCorrected(itemLink)
+-- score. liveTooltip is optional, same meaning as CorrectStatsAgainstTooltip.
+function GW.WasScalingCorrected(itemLink, liveTooltip)
 	local stats = GetRawItemStats(itemLink)
 	if not stats then return false end
-	local _, wasCorrected = CorrectStatsAgainstTooltip(itemLink, stats)
+	local _, wasCorrected = CorrectStatsAgainstTooltip(itemLink, stats, liveTooltip)
 	return wasCorrected
 end
 
-function GW.GetItemStats(itemLink)
+-- liveTooltip is optional - see CorrectStatsAgainstTooltip.
+function GW.GetItemStats(itemLink, liveTooltip)
 	local stats = GetRawItemStats(itemLink)
 	if not stats then return nil end
 	RegisterDiscoveredStats(stats)
-	local correctedStats = CorrectStatsAgainstTooltip(itemLink, stats)
+	local correctedStats = CorrectStatsAgainstTooltip(itemLink, stats, liveTooltip)
 	return correctedStats
 end
 
 -- specId is optional - omit it (or pass nil) to score against your current
 -- active spec's weights, as every existing caller does; the cross-spec
 -- tooltip comparison passes an explicit specId to score the same item
--- against a DIFFERENT spec's own saved weights instead.
-function GW.GetItemScore(itemLink, specId)
-	local stats = GW.GetItemStats(itemLink)
+-- against a DIFFERENT spec's own saved weights instead. liveTooltip is
+-- optional - see GW.GetItemStats/CorrectStatsAgainstTooltip.
+function GW.GetItemScore(itemLink, specId, liveTooltip)
+	local stats = GW.GetItemStats(itemLink, liveTooltip)
 	if not stats then return nil end
 	local profile = specId and GW.GetProfileForSpec(specId) or GW.GetActiveProfile()
 	local score = 0
@@ -825,9 +835,12 @@ end
 -- comparisons) that doesn't need this extra detail.
 -- specId is optional, same meaning as GW.GetItemScore - scores both items
 -- against a specific spec's weights instead of the active spec's, for the
--- cross-spec comparison.
-function GW.GetItemScoreBreakdownVsEquipped(itemLink, equippedLink, specId)
-	local rawCandidateStats = GW.GetItemStats(itemLink)
+-- cross-spec comparison. liveTooltip is optional - applies to itemLink (the
+-- candidate) only, since that's the item actually being shown on it;
+-- equippedLink always uses the separate-scan fallback since it isn't what
+-- this tooltip is displaying.
+function GW.GetItemScoreBreakdownVsEquipped(itemLink, equippedLink, specId, liveTooltip)
+	local rawCandidateStats = GW.GetItemStats(itemLink, liveTooltip)
 	if not rawCandidateStats then return nil end
 	-- GW.GetItemStats reuses one shared scratch table across every call - a
 	-- second call for equippedLink below would otherwise silently overwrite
@@ -982,14 +995,16 @@ end
 -- a single link) - used by the tooltip's stat breakdown to show each stat's
 -- contribution relative to what you're already wearing, not just the
 -- candidate's own absolute numbers. Used by the instance loot list too.
-function GW.GetBestUpgradeDiff(itemLink)
+-- liveTooltip is optional - see GW.GetItemScore/GW.GetItemStats; applies to
+-- itemLink only, not whatever it ends up compared against.
+function GW.GetBestUpgradeDiff(itemLink, liveTooltip)
 	local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
 
 	if not GW.IsItemUsable(itemLink, equipLoc) then
 		return nil, nil, false
 	end
 
-	local score = GW.GetItemScore(itemLink)
+	local score = GW.GetItemScore(itemLink, nil, liveTooltip)
 	if not score then return nil end
 
 	if not equipLoc then return score, nil end
@@ -1124,12 +1139,14 @@ end
 -- (no Unique-Equipped/armor-type narrowing - this is an approximate "would
 -- this be worth it" check for a spec you're not standing in, not a strict
 -- guarantee you could equip it that instant).
-function GW.GetSpecComparisonForItem(itemLink, specId, setName)
+-- liveTooltip is optional - see GW.GetItemScore; applies to itemLink (the
+-- candidate) only, not whatever this spec's Equipment Set has saved.
+function GW.GetSpecComparisonForItem(itemLink, specId, setName, liveTooltip)
 	if not setName then return nil end
 	local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
 	if not equipLoc then return nil end
 
-	local score = GW.GetItemScore(itemLink, specId)
+	local score = GW.GetItemScore(itemLink, specId, liveTooltip)
 	if not score then return nil end
 
 	local slots = slotsForEquipLoc[equipLoc]
@@ -1292,8 +1309,8 @@ GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
 -- line(s) further up the tooltip rather than before them - the breakdown
 -- explains a verdict you've already seen, not the reverse.
 local function AppendScoreBreakdown(tooltip, itemLink)
-	local _, _, _, _, breakdownEquippedLink = GW.GetBestUpgradeDiff(itemLink)
-	local breakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, breakdownEquippedLink)
+	local _, _, _, _, breakdownEquippedLink = GW.GetBestUpgradeDiff(itemLink, tooltip)
+	local breakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, breakdownEquippedLink, nil, tooltip)
 	if not breakdown then return end
 	for _, entry in ipairs(breakdown) do
 		local color = entry.contribution >= 0 and "|cff00ff00" or "|cffff4444"
@@ -1313,7 +1330,7 @@ local function AppendSpecComparisons(tooltip, itemLink)
 	if #specTargets == 0 then return end
 	local fullBreakdown = GW.IsSpecCompareFullBreakdown()
 	for _, target in ipairs(specTargets) do
-		local specScore, specDiff, specEquippedLink = GW.GetSpecComparisonForItem(itemLink, target.specId, target.equipmentSet)
+		local specScore, specDiff, specEquippedLink = GW.GetSpecComparisonForItem(itemLink, target.specId, target.equipmentSet, tooltip)
 		if specScore then
 			tooltip:AddLine(" ")
 			tooltip:AddLine(string.format("%s: %.1f", GW.GetSpecName(target.specId), specScore), 0.4, 0.75, 1.0)
@@ -1333,7 +1350,7 @@ local function AppendSpecComparisons(tooltip, itemLink)
 				tooltip:AddLine("  |cff888888No reference for this slot in this spec's Equipment Set|r")
 			end
 			if fullBreakdown then
-				local specBreakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, specEquippedLink, target.specId)
+				local specBreakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, specEquippedLink, target.specId, tooltip)
 				if specBreakdown then
 					for _, entry in ipairs(specBreakdown) do
 						local color = entry.contribution >= 0 and "|cff00ff00" or "|cffff4444"
@@ -1371,14 +1388,14 @@ local function AppendScoreLines(tooltip, itemLink)
 		return
 	end
 
-	local score = GW.GetItemScore(itemLink)
+	local score = GW.GetItemScore(itemLink, nil, tooltip)
 	if not score then return end
 
 	local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
 
 	tooltip:AddLine(" ")
 	tooltip:AddLine(string.format("GearWeights: %.1f", score), 0.4, 0.75, 1.0)
-	if GW.WasScalingCorrected(itemLink) then
+	if GW.WasScalingCorrected(itemLink, tooltip) then
 		tooltip:AddLine("|cffff8800(scaled item - stats corrected to match this tooltip)|r", 0.7, 0.7, 0.7)
 	end
 
@@ -1785,7 +1802,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 	end
 end)
 
-local function DumpItemDiagnostics(itemLink)
+-- liveTooltip is optional - passed as GameTooltip from /gw dumphover (which
+-- already has this item displayed), so the scaling-correction section below
+-- reads the SAME already-shown tooltip instead of an independent scan.
+local function DumpItemDiagnostics(itemLink, liveTooltip)
 	if not itemLink then
 		DEFAULT_CHAT_FRAME:AddMessage("GearWeights: no item to dump. Shift-click an item into the chat box after /gw dump, or hover it and use /gw dumphover.")
 		return
@@ -1806,11 +1826,12 @@ local function DumpItemDiagnostics(itemLink)
 	end
 
 	DEFAULT_CHAT_FRAME:AddMessage("-- Scaling correction --")
-	local tooltipValues = GetTooltipStatValues(itemLink)
+	DEFAULT_CHAT_FRAME:AddMessage("  Source: " .. (liveTooltip and "already-displayed tooltip (GameTooltip)" or "separate scan tooltip (SetHyperlink)"))
+	local tooltipValues = liveTooltip and ParseTooltipStatLines(liveTooltip) or ScanItemTooltipStatValues(itemLink)
 	if not tooltipValues then
-		DEFAULT_CHAT_FRAME:AddMessage("  GetTooltipStatValues() = nil (SetHyperlink failed on the scan tooltip)")
+		DEFAULT_CHAT_FRAME:AddMessage("  = nil (couldn't read this item's tooltip)")
 	elseif next(tooltipValues) == nil then
-		DEFAULT_CHAT_FRAME:AddMessage("  GetTooltipStatValues() found nothing parseable on this tooltip")
+		DEFAULT_CHAT_FRAME:AddMessage("  found nothing parseable on this tooltip")
 	else
 		DEFAULT_CHAT_FRAME:AddMessage("  Parsed from tooltip text:")
 		for phrase, amount in pairs(tooltipValues) do
@@ -1837,7 +1858,7 @@ local function DumpItemDiagnostics(itemLink)
 	local okEquip, isEquippable = pcall(IsEquippableItem, itemLink)
 	DEFAULT_CHAT_FRAME:AddMessage("  IsEquippableItem() = " .. tostring(isEquippable) .. " (ok=" .. tostring(okEquip) .. ")")
 	DEFAULT_CHAT_FRAME:AddMessage("  GW.IsItemUsable() = " .. tostring(GW.IsItemUsable(itemLink)))
-	DEFAULT_CHAT_FRAME:AddMessage("  GW.WasScalingCorrected() = " .. tostring(GW.WasScalingCorrected(itemLink)))
+	DEFAULT_CHAT_FRAME:AddMessage("  GW.WasScalingCorrected() = " .. tostring(GW.WasScalingCorrected(itemLink, liveTooltip)))
 
 	DEFAULT_CHAT_FRAME:AddMessage("-- Tooltip text --")
 	local scanTip = _G["GearWeightsScanTooltip"]
@@ -1864,7 +1885,7 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 	msg = msg or ""
 	if msg == "dumphover" then
 		local _, link = GameTooltip:GetItem()
-		DumpItemDiagnostics(link)
+		DumpItemDiagnostics(link, GameTooltip)
 	elseif strsub(msg, 1, 4) == "dump" then
 		local link = strtrim(strsub(msg, 5))
 		if link == "" then link = nil end
