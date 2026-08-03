@@ -1315,9 +1315,9 @@ GameTooltip:HookScript("OnHide", ResetWeaponReferenceTooltips)
 -- rather than a single item). Appended after the Upgrade/Downgrade verdict
 -- line(s) further up the tooltip rather than before them - the breakdown
 -- explains a verdict you've already seen, not the reverse.
-local function AppendScoreBreakdown(tooltip, itemLink)
-	local _, _, _, _, breakdownEquippedLink = GW.GetBestUpgradeDiff(itemLink, tooltip)
-	local breakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, breakdownEquippedLink, nil, tooltip)
+local function AppendScoreBreakdown(tooltip, itemLink, liveTooltip)
+	local _, _, _, _, breakdownEquippedLink = GW.GetBestUpgradeDiff(itemLink, liveTooltip)
+	local breakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, breakdownEquippedLink, nil, liveTooltip)
 	if not breakdown then return end
 	for _, entry in ipairs(breakdown) do
 		local color = entry.contribution >= 0 and "|cff00ff00" or "|cffff4444"
@@ -1332,12 +1332,12 @@ end
 -- (Equipment-Set-based, since there's no live "currently equipped" for a
 -- spec you're not standing in) and that spec's own saved stat weights, not
 -- whichever spec is actually active right now.
-local function AppendSpecComparisons(tooltip, itemLink)
+local function AppendSpecComparisons(tooltip, itemLink, liveTooltip)
 	local specTargets = GW.GetSpecCompareTargets()
 	if #specTargets == 0 then return end
 	local fullBreakdown = GW.IsSpecCompareFullBreakdown()
 	for _, target in ipairs(specTargets) do
-		local specScore, specDiff, specEquippedLink = GW.GetSpecComparisonForItem(itemLink, target.specId, target.equipmentSet, tooltip)
+		local specScore, specDiff, specEquippedLink = GW.GetSpecComparisonForItem(itemLink, target.specId, target.equipmentSet, liveTooltip)
 		if specScore then
 			tooltip:AddLine(" ")
 			tooltip:AddLine(string.format("%s: %.1f", GW.GetSpecName(target.specId), specScore), 0.4, 0.75, 1.0)
@@ -1357,7 +1357,7 @@ local function AppendSpecComparisons(tooltip, itemLink)
 				tooltip:AddLine("  |cff888888No reference for this slot in this spec's Equipment Set|r")
 			end
 			if fullBreakdown then
-				local specBreakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, specEquippedLink, target.specId, tooltip)
+				local specBreakdown = GW.GetItemScoreBreakdownVsEquipped(itemLink, specEquippedLink, target.specId, liveTooltip)
 				if specBreakdown then
 					for _, entry in ipairs(specBreakdown) do
 						local color = entry.contribution >= 0 and "|cff00ff00" or "|cffff4444"
@@ -1369,8 +1369,19 @@ local function AppendSpecComparisons(tooltip, itemLink)
 	end
 end
 
-local function AppendScoreLines(tooltip, itemLink)
+-- forceSeparateScan is true only for SetLootItem/SetLootRollItem (an item
+-- still sitting unlooted, on the corpse or in a roll popup) - unlike an
+-- owned item's tooltip, this one is still actively settling toward its
+-- final scaled value, and reading it directly can freeze the displayed
+-- score at whatever pre-settle numbers happened to be showing. A separate
+-- scan query re-asks for this item's current values on every hover instead
+-- of trusting whatever's already painted, which is what lets it keep
+-- tracking the settle in progress the same way Blizzard's own tooltip text
+-- does. This is the interactive-hover counterpart to the background ranking
+-- scan below, which never had a live tooltip to read in the first place.
+local function AppendScoreLines(tooltip, itemLink, forceSeparateScan)
 	if not itemLink then return end
+	local liveTooltip = not forceSeparateScan and tooltip or nil
 
 	-- Blizzard's native "Currently Equipped" compare tooltip (ShoppingTooltip1/2)
 	-- is used below (together with GetLiveHoveredCandidate) to give a tracked
@@ -1395,19 +1406,19 @@ local function AppendScoreLines(tooltip, itemLink)
 		return
 	end
 
-	local score = GW.GetItemScore(itemLink, nil, tooltip)
+	local score = GW.GetItemScore(itemLink, nil, liveTooltip)
 	if not score then return end
 
 	local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
 
 	tooltip:AddLine(" ")
 	tooltip:AddLine(string.format("GearWeights: %.1f", score), 0.4, 0.75, 1.0)
-	if GW.WasScalingCorrected(itemLink, tooltip) then
+	if GW.WasScalingCorrected(itemLink, liveTooltip) then
 		tooltip:AddLine("|cffff8800(scaled item - stats corrected to match this tooltip)|r", 0.7, 0.7, 0.7)
 	end
 
 	if not equipLoc then
-		AppendScoreBreakdown(tooltip, itemLink)
+		AppendScoreBreakdown(tooltip, itemLink, liveTooltip)
 		tooltip:Show()
 		return
 	end
@@ -1509,8 +1520,8 @@ local function AppendScoreLines(tooltip, itemLink)
 				end
 			end
 		end
-		AppendScoreBreakdown(tooltip, itemLink)
-		AppendSpecComparisons(tooltip, itemLink)
+		AppendScoreBreakdown(tooltip, itemLink, liveTooltip)
+		AppendSpecComparisons(tooltip, itemLink, liveTooltip)
 		tooltip:Show()
 		return
 	end
@@ -1534,8 +1545,8 @@ local function AppendScoreLines(tooltip, itemLink)
 	for _, slotId in ipairs(slots) do
 		if slotId ~= INVSLOT_MAINHAND and slotId ~= INVSLOT_OFFHAND
 			and GW.GetEquippedLinkForScoring(slotId) == itemLink then
-			AppendScoreBreakdown(tooltip, itemLink)
-			AppendSpecComparisons(tooltip, itemLink)
+			AppendScoreBreakdown(tooltip, itemLink, liveTooltip)
+			AppendSpecComparisons(tooltip, itemLink, liveTooltip)
 			tooltip:Show()
 			return
 		end
@@ -1684,8 +1695,8 @@ local function AppendScoreLines(tooltip, itemLink)
 		end
 	end
 
-	AppendScoreBreakdown(tooltip, itemLink)
-	AppendSpecComparisons(tooltip, itemLink)
+	AppendScoreBreakdown(tooltip, itemLink, liveTooltip)
+	AppendSpecComparisons(tooltip, itemLink, liveTooltip)
 	tooltip:Show()
 end
 
@@ -1707,11 +1718,13 @@ local function HookTooltip(tooltip)
 	end)
 	hooksecurefunc(tooltip, "SetLootItem", function(self, slot)
 		local link = GetLootSlotLink(slot)
-		AppendScoreLines(self, link)
+		-- forceSeparateScan: true - this item hasn't been looted yet and may
+		-- still be settling toward its final scaled value. See AppendScoreLines.
+		AppendScoreLines(self, link, true)
 	end)
 	hooksecurefunc(tooltip, "SetLootRollItem", function(self, rollId)
 		local link = GetLootRollItemLink(rollId)
-		AppendScoreLines(self, link)
+		AppendScoreLines(self, link, true)
 	end)
 	hooksecurefunc(tooltip, "SetAuctionItem", function(self, auctionType, index)
 		local link = GetAuctionItemLink(auctionType, index)
