@@ -1253,6 +1253,25 @@ local function RefreshLootRows(onDone)
 	end)
 end
 
+-- GET_ITEM_INFO_RECEIVED can arrive in rapid bursts (several items resolving
+-- within the same second - common right after a loading screen or looting
+-- several corpses back to back), and RefreshLootRows below re-scans the
+-- WHOLE zone's loot table from scratch with no guard against a second scan
+-- starting while an earlier one is still mid-batch. Debounced so a burst of
+-- events collapses into a single rescan once things go quiet, instead of
+-- several full, overlapping rescans stacking up.
+local LOOT_ROWS_REFRESH_DEBOUNCE = 1
+local lootRowsRefreshDebounceElapsed = 0
+local lootRowsRefreshDebounceFrame = CreateFrame("Frame")
+lootRowsRefreshDebounceFrame:Hide()
+lootRowsRefreshDebounceFrame:SetScript("OnUpdate", function(self, elapsed)
+	lootRowsRefreshDebounceElapsed = lootRowsRefreshDebounceElapsed + elapsed
+	if lootRowsRefreshDebounceElapsed >= LOOT_ROWS_REFRESH_DEBOUNCE then
+		self:Hide()
+		if lootPanel and lootPanel:IsShown() then RefreshLootRows() end
+	end
+end)
+
 local lootEventFrame = CreateFrame("Frame")
 lootEventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 lootEventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
@@ -1263,7 +1282,8 @@ lootEventFrame:SetScript("OnEvent", function(self, event)
 		-- rescan - the underlying loot data hasn't changed.
 		RenderLootRows()
 	else
-		RefreshLootRows()
+		lootRowsRefreshDebounceElapsed = 0
+		lootRowsRefreshDebounceFrame:Show()
 	end
 end)
 
