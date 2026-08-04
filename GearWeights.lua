@@ -863,11 +863,16 @@ function GW.WasScalingCorrected(itemLink, liveTooltip)
 	return wasCorrected
 end
 
--- liveTooltip is optional - see CorrectStatsAgainstTooltip.
-function GW.GetItemStats(itemLink, liveTooltip)
+-- liveTooltip is optional - see CorrectStatsAgainstTooltip. skipScalingCheck
+-- is optional - true bypasses tooltip-based correction entirely (raw
+-- GetItemStats() only, no SetHyperlink/ParseTooltipStatLines involved at
+-- all), for a caller scoring many DIFFERENT hypothetical items in bulk
+-- rather than one specific real item - see GW.GetBestUpgradeDiff.
+function GW.GetItemStats(itemLink, liveTooltip, skipScalingCheck)
 	local stats = GetRawItemStats(itemLink)
 	if not stats then return nil end
 	RegisterDiscoveredStats(stats)
+	if skipScalingCheck then return stats end
 	local correctedStats = CorrectStatsAgainstTooltip(itemLink, stats, liveTooltip)
 	return correctedStats
 end
@@ -875,10 +880,10 @@ end
 -- specId is optional - omit it (or pass nil) to score against your current
 -- active spec's weights, as every existing caller does; the cross-spec
 -- tooltip comparison passes an explicit specId to score the same item
--- against a DIFFERENT spec's own saved weights instead. liveTooltip is
--- optional - see GW.GetItemStats/CorrectStatsAgainstTooltip.
-function GW.GetItemScore(itemLink, specId, liveTooltip)
-	local stats = GW.GetItemStats(itemLink, liveTooltip)
+-- against a DIFFERENT spec's own saved weights instead. liveTooltip and
+-- skipScalingCheck are optional - see GW.GetItemStats.
+function GW.GetItemScore(itemLink, specId, liveTooltip, skipScalingCheck)
+	local stats = GW.GetItemStats(itemLink, liveTooltip, skipScalingCheck)
 	if not stats then return nil end
 	local profile = specId and GW.GetProfileForSpec(specId) or GW.GetActiveProfile()
 	local score = 0
@@ -1066,16 +1071,19 @@ end
 -- a single link) - used by the tooltip's stat breakdown to show each stat's
 -- contribution relative to what you're already wearing, not just the
 -- candidate's own absolute numbers. Used by the instance loot list too.
--- liveTooltip is optional - see GW.GetItemScore/GW.GetItemStats; applies to
--- itemLink only, not whatever it ends up compared against.
-function GW.GetBestUpgradeDiff(itemLink, liveTooltip)
+-- liveTooltip and skipScalingCheck are optional - see GW.GetItemScore/
+-- GW.GetItemStats; both apply to itemLink only, not whatever it ends up
+-- compared against (equipped-slot lookups already use a cheap, reliable,
+-- always-local live tooltip of their own - see GW.GetLiveTooltipForEquippedLink -
+-- regardless of what's passed here).
+function GW.GetBestUpgradeDiff(itemLink, liveTooltip, skipScalingCheck)
 	local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(itemLink)
 
 	if not GW.IsItemUsable(itemLink, equipLoc) then
 		return nil, nil, false
 	end
 
-	local score = GW.GetItemScore(itemLink, nil, liveTooltip)
+	local score = GW.GetItemScore(itemLink, nil, liveTooltip, skipScalingCheck)
 	if not score then return nil end
 
 	if not equipLoc then return score, nil end
@@ -2274,7 +2282,7 @@ SlashCmdList["GEARWEIGHTS"] = function(msg)
 												-- side-lock excludes an item.
 												local reachableOk = GW.IsReputationFactionReachable and GW.IsReputationFactionReachable(factionName)
 												local tierOk = GW.IsReputationTierEnabled and GW.IsReputationTierEnabled(standing)
-												local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
+												local score, diff, usable = GW.GetBestUpgradeDiff(itemLink, nil, true)
 												local verdict
 												if not reachableOk then
 													verdict = "|cff888888wrong Alliance/Horde side|r"

@@ -241,7 +241,9 @@ function GW.BuildInstanceLootList(onComplete)
 			local entry = work.entry
 			local itemLink = ResolveItemLink(entry.itemID, diffParam)
 			if itemLink then
-				local score, diff, usable, flipsLoadout = GW.GetBestUpgradeDiff(itemLink)
+				-- skipScalingCheck: true - see the matching comment in
+				-- GW.BuildDungeonRankingList.
+				local score, diff, usable, flipsLoadout = GW.GetBestUpgradeDiff(itemLink, nil, true)
 				if usable == false then
 					table.insert(list, {
 						bossName = work.bossName,
@@ -669,7 +671,15 @@ function GW.BuildDungeonRankingList(options, onProgress, onComplete)
 				end
 			end
 			if itemLink then
-				local score, diff, usable, flipsLoadout = GW.GetBestUpgradeDiff(itemLink)
+				-- skipScalingCheck: true - this is one of potentially thousands
+				-- of hypothetical items resolved from AtlasLoot's static data,
+				-- not a real, currently-dropped instance - GetItemStats() is a
+				-- fine rough estimate for ranking purposes, and paying for a
+				-- real tooltip-based scaling correction (a SetHyperlink query,
+				-- often against an item this client has never cached before)
+				-- on every single one of them caused a severe lag spike when
+				-- this scan runs, since it batches 20 of these per frame.
+				local score, diff, usable, flipsLoadout = GW.GetBestUpgradeDiff(itemLink, nil, true)
 				if usable ~= false and diff and diff > 0.05 then
 					local result = resultByKey[work.zoneKey]
 					result[work.tier] = result[work.tier] + 1
@@ -780,7 +790,9 @@ function GW.BuildReputationRankingList(onProgress, onComplete)
 					-- side-lock (GW.IsReputationFactionReachable) excludes an
 					-- item outright.
 					if standing and GW.IsReputationFactionReachable(factionName) and GW.IsReputationTierEnabled(standing) then
-						local score, diff, usable = GW.GetBestUpgradeDiff(itemLink)
+						-- skipScalingCheck: true - see the matching comment in
+						-- GW.BuildDungeonRankingList above.
+						local score, diff, usable = GW.GetBestUpgradeDiff(itemLink, nil, true)
 						if usable ~= false and diff and diff > 0.05 then
 							local result = resultByKey[work.zoneKey]
 							result[standing] = result[standing] + 1

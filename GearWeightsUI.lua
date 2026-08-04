@@ -300,10 +300,16 @@ end
 -- Same "genuine upgrade" criteria used everywhere else (diff > 0.05), but for
 -- an arbitrary item link rather than only ones AtlasLoot recognizes as
 -- boss-specific - used to decide whether to glow it, whatever it is or
--- wherever it came from (instance, world, quest reward).
+-- wherever it came from (instance, world, quest reward). Every caller of
+-- this runs synchronously over however many items are in a loot window/roll
+-- batch/vendor page/quest reward list, with no batching between them -
+-- skipScalingCheck avoids a real tooltip-scan query (a server round-trip,
+-- often for an item this client has never cached before) per item in that
+-- loop. This is only a rough "worth highlighting" signal anyway; the actual
+-- tooltip hover on the item still gives the precise, corrected score.
 local function IsItemLinkAnUpgrade(itemLink)
 	if not itemLink then return false end
-	local _, diff, usable = GW.GetBestUpgradeDiff(itemLink)
+	local _, diff, usable = GW.GetBestUpgradeDiff(itemLink, nil, true)
 	if usable == false then return false end
 	return diff ~= nil and diff > 0.05
 end
