@@ -693,6 +693,21 @@ end
 -- potential loot nobody has picked up yet).
 local scalingCheckTip
 
+-- Per-itemLink, short-lived cache for ScanItemTooltipStatValues below - a
+-- single hover can easily trigger several independent scans of the SAME
+-- item within a fraction of a second (a loot tooltip's own OnUpdate-driven
+-- refresh re-firing SetLootItem repeatedly while the mouse sits still, and
+-- GearWeights itself separately re-deriving the same item's stats a few
+-- times per append pass - score, correction check, breakdown, etc). Without
+-- this, each of those becomes its own full SetHyperlink query, and on this
+-- server that appears to be a real, non-trivial server round-trip for a
+-- still-settling item specifically - enough to spike into a client-wide
+-- freeze when it stacks up, worst on a session's first-ever drop where
+-- nothing is warm yet. A fraction of a second of staleness is invisible to
+-- a human eye watching a tooltip settle, so this costs nothing perceptible.
+local scanCache = {}
+local SCAN_CACHE_SECONDS = 0.5
+
 -- Parses stat-bearing lines off an ALREADY-POPULATED tooltip frame, without
 -- issuing any new item query of our own.
 local function ParseTooltipStatLines(tooltipFrame)
@@ -726,18 +741,25 @@ local function ParseTooltipStatLines(tooltipFrame)
 end
 
 -- Fallback for when no live tooltip is available (the background ranking
--- scan, scoring items nobody has looted yet) - a dedicated scan tooltip via
--- SetHyperlink. Not cached - these are exactly the items still actively
--- settling, so a stale cached read would be worse than a fresh one each time.
+-- scan, scoring items nobody has looted yet, and loot/roll popup hovers) - a
+-- dedicated scan tooltip via SetHyperlink, throttled per itemLink by
+-- scanCache above so repeated calls within the same fraction of a second
+-- reuse the last result instead of re-querying.
 local function ScanItemTooltipStatValues(itemLink)
+	local now = GetTime()
+	local cached = scanCache[itemLink]
+	if cached and (now - cached.time) < SCAN_CACHE_SECONDS then
+		return cached.values
+	end
 	if not scalingCheckTip then
 		scalingCheckTip = CreateFrame("GameTooltip", "GearWeightsScalingCheckTooltip", nil, "GameTooltipTemplate")
 		scalingCheckTip:SetOwner(UIParent, "ANCHOR_NONE")
 	end
 	scalingCheckTip:ClearLines()
 	local ok = pcall(scalingCheckTip.SetHyperlink, scalingCheckTip, itemLink)
-	if not ok then return nil end
-	return ParseTooltipStatLines(scalingCheckTip)
+	local values = ok and ParseTooltipStatLines(scalingCheckTip) or nil
+	scanCache[itemLink] = { time = now, values = values }
+	return values
 end
 
 -- Ungated fetch of GetItemStats()'s own raw numbers, before any tooltip
