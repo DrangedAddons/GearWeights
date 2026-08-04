@@ -1427,8 +1427,9 @@ function GW.GetTwoHandComparisonScore()
 	local twoHandLink = GW.GetWeaponBoxLink("twoHand")
 	local mhLink = GW.GetWeaponBoxLink("mainHand")
 	local ohLink = GW.GetWeaponBoxLink("offHand")
-	local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
-	local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
+	local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_MAINHAND, twoHandLink)) or 0
+	local comboScore = (mhLink and GW.GetItemScore(mhLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_MAINHAND, mhLink)) or 0)
+		+ (ohLink and GW.GetItemScore(ohLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_OFFHAND, ohLink)) or 0)
 	return math.max(twoHandScore, comboScore)
 end
 
@@ -1444,9 +1445,9 @@ function GW.CheckWeaponLoadoutFlip(replacingBox, candidateScore)
 	local twoHandLink = GW.GetWeaponBoxLink("twoHand")
 	local mhLink = GW.GetWeaponBoxLink("mainHand")
 	local ohLink = GW.GetWeaponBoxLink("offHand")
-	local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
-	local mhScore = mhLink and GW.GetItemScore(mhLink) or 0
-	local ohScore = ohLink and GW.GetItemScore(ohLink) or 0
+	local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_MAINHAND, twoHandLink)) or 0
+	local mhScore = mhLink and GW.GetItemScore(mhLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_MAINHAND, mhLink)) or 0
+	local ohScore = ohLink and GW.GetItemScore(ohLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_OFFHAND, ohLink)) or 0
 	local comboScore = mhScore + ohScore
 
 	local newTwoHandScore, newComboScore = twoHandScore, comboScore

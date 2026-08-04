@@ -762,6 +762,48 @@ local function ScanItemTooltipStatValues(itemLink)
 	return values
 end
 
+-- A live tooltip for whatever's ACTUALLY equipped in a given inventory slot
+-- right now - every comparison/breakdown elsewhere in this file scores not
+-- just the hovered candidate but also whatever it's being measured against
+-- (equipped gear, tracked weapon boxes), and those reference items are
+-- themselves owned instances, subject to the exact same SetHyperlink
+-- unreliability described above. SetInventoryItem references the live,
+-- owned instance directly (same as GameTooltip does when you hover your own
+-- gear), so it gets the same reliable source the hovered item itself gets,
+-- instead of falling back to a separate scan for every reference item too.
+-- expectedLink guards against a tracked weapon box that's locked to a
+-- reference item different from what's actually worn in that slot right
+-- now - in that case there's no live tooltip for the box's own link at all,
+-- so this correctly returns nil and callers fall back to the separate scan.
+-- Exposed on GW (not file-local) since GearWeightsLoot.lua's own weapon-box
+-- scoring (GW.GetTwoHandComparisonScore/GW.CheckWeaponLoadoutFlip) needs it too.
+local slotReferenceTip
+function GW.GetLiveTooltipForEquippedLink(slotId, expectedLink)
+	if not slotId or not expectedLink then return nil end
+	if GetInventoryItemLink("player", slotId) ~= expectedLink then return nil end
+	if not slotReferenceTip then
+		slotReferenceTip = CreateFrame("GameTooltip", "GearWeightsSlotReferenceTooltip", nil, "GameTooltipTemplate")
+		slotReferenceTip:SetOwner(UIParent, "ANCHOR_NONE")
+	end
+	slotReferenceTip:ClearLines()
+	local ok = pcall(slotReferenceTip.SetInventoryItem, slotReferenceTip, "player", slotId)
+	if not ok then return nil end
+	return slotReferenceTip
+end
+
+-- Which equipped slot (if any) currently holds this exact link - callers
+-- that only have a bare equippedLink (not the slot it came from) use this
+-- to still get a live reference tooltip via GetLiveTooltipForEquippedLink
+-- above, instead of the unreliable separate scan. Only 19 slots, so a plain
+-- scan is cheap enough to not need caching.
+local function FindEquippedSlotForLink(link)
+	if not link then return nil end
+	for slotId = 1, 19 do
+		if GetInventoryItemLink("player", slotId) == link then return slotId end
+	end
+	return nil
+end
+
 -- Ungated fetch of GetItemStats()'s own raw numbers, before any tooltip
 -- correction - the shared source both GW.GetItemStats and
 -- GW.WasScalingCorrected build on.
@@ -877,7 +919,7 @@ function GW.GetItemScoreBreakdownVsEquipped(itemLink, equippedLink, specId, live
 	-- the exact same (now-equipped-only) data and every diff computing to 0.
 	local candidateStats = {}
 	for k, v in pairs(rawCandidateStats) do candidateStats[k] = v end
-	local equippedStats = equippedLink and GW.GetItemStats(equippedLink) or nil
+	local equippedStats = equippedLink and GW.GetItemStats(equippedLink, GW.GetLiveTooltipForEquippedLink(FindEquippedSlotForLink(equippedLink), equippedLink)) or nil
 	local profile = specId and GW.GetProfileForSpec(specId) or GW.GetActiveProfile()
 	local known = GW.GetKnownStats()
 
@@ -1070,7 +1112,7 @@ function GW.GetBestUpgradeDiff(itemLink, liveTooltip)
 						diff = score
 					end
 				elseif equippedLink ~= itemLink then
-					local equippedScore = GW.GetItemScore(equippedLink)
+					local equippedScore = GW.GetItemScore(equippedLink, nil, GW.GetLiveTooltipForEquippedLink(slotId, equippedLink))
 					if equippedScore then diff = score - equippedScore end
 				end
 				if diff and (not bestDiff or diff > bestDiff) then
@@ -1196,7 +1238,7 @@ function GW.GetSpecComparisonForItem(itemLink, specId, setName, liveTooltip)
 		-- (and so got compared against the real, live-equipped item
 		-- instead) - skip the slot entirely instead of guessing.
 		if equippedLink and equippedLink ~= itemLink then
-			local equippedScore = GW.GetItemScore(equippedLink, specId)
+			local equippedScore = GW.GetItemScore(equippedLink, specId, GW.GetLiveTooltipForEquippedLink(slotId, equippedLink))
 			if equippedScore then
 				local diff = score - equippedScore
 				sawAnySlot = true
@@ -1274,7 +1316,10 @@ local function GetLiveHoveredCandidate(selfLink)
 	if not GameTooltip:IsShown() then return nil end
 	local candidateName, candidateLink = GameTooltip:GetItem()
 	if not candidateLink or candidateLink == selfLink then return nil end
-	local candidateScore = GW.GetItemScore(candidateLink)
+	-- GameTooltip is showing candidateLink right now (that's exactly what
+	-- GetItem() just confirmed), so its lines are read directly rather than
+	-- triggering a separate, less reliable scan for an item already on screen.
+	local candidateScore = GW.GetItemScore(candidateLink, nil, GameTooltip)
 	if not candidateScore then return nil end
 	local _, _, _, _, _, _, _, _, candidateEquipLoc = GetItemInfo(candidateLink)
 	return candidateLink, candidateScore, candidateEquipLoc, candidateName
@@ -1288,6 +1333,16 @@ end
 -- more than one line - e.g. the Main-Hand box shows both its own direct
 -- comparison AND the resulting combo-vs-Two-Hand comparison.
 --
+-- Which live inventory slot each reference label corresponds to, so a
+-- reference that's actually equipped right now can be read via a reliable
+-- SetInventoryItem tooltip instead of the separate-scan fallback - see
+-- GetLiveTooltipForEquippedLink. Two-Hand occupies the Main-Hand slot.
+local weaponReferenceSlotForLabel = {
+	["Main-Hand"] = INVSLOT_MAINHAND,
+	["Off-Hand"] = INVSLOT_OFFHAND,
+	["Two-Hand"] = INVSLOT_MAINHAND,
+}
+
 -- Callers skip calling this at all (via IsWeaponBoxShownNatively) when the
 -- box being referenced is already visible in Blizzard's own native compare
 -- tooltip - no need to duplicate a window that's already on screen.
@@ -1306,7 +1361,12 @@ local function ShowWeaponReferenceTooltip(referenceLink, label, comparisons)
 	tt:ClearAllPoints()
 	tt:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 6, 0)
 	tt:SetHyperlink(referenceLink)
-	local referenceScore = GW.GetItemScore(referenceLink)
+	-- Prefer a live-equipped-slot read (reliable) over this tooltip's own
+	-- SetHyperlink-populated lines (not reliable for an owned item, but this
+	-- tooltip needs SetHyperlink regardless to actually display something) -
+	-- falling back to tt itself still avoids triggering a THIRD, separate
+	-- scan on top of the SetHyperlink call just above.
+	local referenceScore = GW.GetItemScore(referenceLink, nil, GW.GetLiveTooltipForEquippedLink(weaponReferenceSlotForLabel[label], referenceLink) or tt)
 	if referenceScore then
 		tt:AddLine(" ")
 		tt:AddLine(string.format("GearWeights: %.1f", referenceScore), 0.4, 0.75, 1.0)
@@ -1462,7 +1522,7 @@ local function AppendScoreLines(tooltip, itemLink, forceSeparateScan)
 		if not twoHandLink and not mhLink and not ohLink then
 			tooltip:AddLine(mhIgnoreReason and ("|cff888888Upgrade (weapon slots empty) (" .. mhIgnoreReason .. ")|r") or "|cff00ff00Upgrade (weapon slots empty)|r")
 		else
-			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
+			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_MAINHAND, twoHandLink)) or 0
 			-- This 2H item's own combo math is always the plain, existing
 			-- Main-Hand + Off-Hand loadout - it never tries to fold in
 			-- whatever Main-Hand/Off-Hand item you might ALSO be evaluating
@@ -1472,7 +1532,8 @@ local function AppendScoreLines(tooltip, itemLink, forceSeparateScan)
 			-- substitutes a live read of whatever you're actually hovering
 			-- instead, which is safe for the reasons explained above
 			-- GetLiveHoveredCandidate.
-			local comboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + (ohLink and GW.GetItemScore(ohLink) or 0)
+			local comboScore = (mhLink and GW.GetItemScore(mhLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_MAINHAND, mhLink)) or 0)
+				+ (ohLink and GW.GetItemScore(ohLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_OFFHAND, ohLink)) or 0)
 			if not isOwnTwoHandReference then
 				AppendComparisonLine(tooltip, string.format("vs Two-Hand %.1f: ", twoHandScore), score, twoHandScore, mhIgnoreReason)
 			end
@@ -1488,9 +1549,9 @@ local function AppendScoreLines(tooltip, itemLink, forceSeparateScan)
 					for _, slotId in ipairs(slotsForEquipLoc[candidateEquipLoc]) do
 						local newComboScore
 						if slotId == INVSLOT_MAINHAND then
-							newComboScore = candidateScore + (ohLink and GW.GetItemScore(ohLink) or 0)
+							newComboScore = candidateScore + (ohLink and GW.GetItemScore(ohLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_OFFHAND, ohLink)) or 0)
 						elseif slotId == INVSLOT_OFFHAND then
-							newComboScore = (mhLink and GW.GetItemScore(mhLink) or 0) + candidateScore
+							newComboScore = (mhLink and GW.GetItemScore(mhLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_MAINHAND, mhLink)) or 0) + candidateScore
 						end
 						if newComboScore then
 							tooltip:AddLine(string.format("Main-Hand + Off-Hand Combo: %.1f", newComboScore), 0.7, 0.7, 0.7)
@@ -1596,7 +1657,7 @@ local function AppendScoreLines(tooltip, itemLink, forceSeparateScan)
 		local slotBlockedBy2H = slotId == INVSLOT_OFFHAND and IsMainHandTwoHanded()
 		local slotIgnoreReason = GW.GetSlotIgnoreReason(slotId) or armorIgnoreReason
 		if uniqueNarrowed and not uniqueEligible[slotId] and equippedLink and equippedLink ~= itemLink then
-			local equippedScore = GW.GetItemScore(equippedLink)
+			local equippedScore = GW.GetItemScore(equippedLink, nil, GW.GetLiveTooltipForEquippedLink(slotId, equippedLink))
 			if equippedScore then
 				local diff = score - equippedScore
 				local wouldBeNote = diff > 0.05 and string.format(" - would be +%.1f", diff) or ""
@@ -1611,7 +1672,7 @@ local function AppendScoreLines(tooltip, itemLink, forceSeparateScan)
 				tooltip:AddLine(prefix .. "|cff00ff00Upgrade (slot empty)|r")
 			end
 		elseif equippedLink ~= itemLink then
-			local equippedScore = GW.GetItemScore(equippedLink)
+			local equippedScore = GW.GetItemScore(equippedLink, nil, GW.GetLiveTooltipForEquippedLink(slotId, equippedLink))
 			if equippedScore then
 				AppendComparisonLine(tooltip, prefix, score, equippedScore, slotIgnoreReason)
 			end
@@ -1627,8 +1688,8 @@ local function AppendScoreLines(tooltip, itemLink, forceSeparateScan)
 		if slotId == INVSLOT_MAINHAND or slotId == INVSLOT_OFFHAND then
 			local mhLink = GW.GetWeaponBoxLink("mainHand")
 			local ohLink = GW.GetWeaponBoxLink("offHand")
-			local mhScore = mhLink and GW.GetItemScore(mhLink) or nil
-			local ohScore = ohLink and GW.GetItemScore(ohLink) or nil
+			local mhScore = mhLink and GW.GetItemScore(mhLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_MAINHAND, mhLink)) or nil
+			local ohScore = ohLink and GW.GetItemScore(ohLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_OFFHAND, ohLink)) or nil
 			local newComboScore
 			if slotId == INVSLOT_MAINHAND then
 				newComboScore = score + (ohScore or 0)
@@ -1636,7 +1697,7 @@ local function AppendScoreLines(tooltip, itemLink, forceSeparateScan)
 				newComboScore = (mhScore or 0) + score
 			end
 			local twoHandLink = GW.GetWeaponBoxLink("twoHand")
-			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink) or 0
+			local twoHandScore = twoHandLink and GW.GetItemScore(twoHandLink, nil, GW.GetLiveTooltipForEquippedLink(INVSLOT_MAINHAND, twoHandLink)) or 0
 			local oldComboScore = (mhScore or 0) + (ohScore or 0)
 			-- On Blizzard's native tooltip showing your tracked Main-Hand/
 			-- Off-Hand item itself, "newComboScore" above is computed from
