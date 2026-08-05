@@ -332,6 +332,7 @@ local EXCLUDED_ZONE_NAMES = {
 local RAID_ZONE_NAME_WHITELIST = {
 	["World Bosses"] = true,
 	["Zul'Gurub"] = true,
+	["Molten Core"] = true,
 }
 -- Also Type=ClassicDungeonExt, but it's a vendor purchase list, not a
 -- dungeon - recategorized into its own "vendor" bucket instead.
@@ -407,9 +408,10 @@ GW.REPUTATION_ZONE_LIST = {
 	{ key = "Zandalar", name = "Zandalar Tribe" },
 	{ key = "Bloodsail", name = "Bloodsail Buccaneers" },
 	{ key = "Cenarion", name = "Cenarion Circle" },
-	-- Hydraxian Waterlords rep is earned in Molten Core, which isn't
-	-- confirmed live on this server yet either - same treatment as Brood of
-	-- Nozdormu/Blackwing Lair above.
+	-- Hydraxian Waterlords rep is earned in Molten Core - left excluded for
+	-- now by deliberate choice even though Molten Core itself is enabled
+	-- (RAID_ZONE_NAME_WHITELIST) above, unlike Brood of Nozdormu/Blackwing
+	-- Lair, which stay tied to BWL's own availability.
 	{ key = "Hydraxian", name = "Hydraxian Waterlords", available = false },
 	{ key = "DesolaceCentaurClans", name = "Desolace Centaur Clans" },
 	{ key = "Thorium", name = "Thorium Brotherhood" },
